@@ -2,9 +2,9 @@ package main
 
 import (
 	"fmt"
-	"github.com/AndroSOM/AndroSOM/helper"
-	"github.com/AndroSOM/AndroSOM/miner"
-	"github.com/mattn/go-gtk/glib"
+	"github.com/AndroSOM/FeatureMiner/helper"
+	"github.com/AndroSOM/FeatureMiner/miner"
+	"github.com/AndroSOM/FeatureMiner/setup"
 	"github.com/mattn/go-gtk/gtk"
 	"strconv"
 )
@@ -15,10 +15,19 @@ var apks []string
 func CreateWindow() *gtk.Window {
 	window := gtk.NewWindow(gtk.WINDOW_TOPLEVEL)
 	window.SetTitle("AndroSOM Feature Miner")
-	window.SetDefaultSize(700, 600)
+	window.SetDefaultSize(600, 600)
 	vbox := gtk.NewVBox(false, 1)
 	CreateMenu(window, vbox)
-	CreateMiner(vbox)
+
+	notebook := gtk.NewNotebook()
+	main_page := gtk.NewFrame("Miner")
+	main_page.Add(MinerPage())
+	notebook.AppendPage(main_page, gtk.NewLabel("Feature Miner"))
+	setup_page := gtk.NewFrame("Setup")
+	setup_page.Add(SetupPage())
+	notebook.AppendPage(setup_page, gtk.NewLabel("Dependencies"))
+
+	vbox.Add(notebook)
 	window.Add(vbox)
 	return window
 }
@@ -32,10 +41,7 @@ func CreateMenu(w *gtk.Window, vbox *gtk.VBox) {
 	action_group.AddAction(gtk.NewAction("FileMenu", "File", "", ""))
 
 	action_filequit := gtk.NewAction("FileQuit", "", "", gtk.STOCK_QUIT)
-	action_filequit.Connect("activate", func() {
-		fmt.Println("Exiting FeatureMiner..")
-		gtk.MainQuit()
-	})
+	action_filequit.Connect("activate", gtk.MainQuit)
 	action_group.AddActionWithAccel(action_filequit, "")
 
 	action_group.AddAction(gtk.NewAction("HelpMenu", "Help", "", ""))
@@ -60,9 +66,8 @@ func CreateMenu(w *gtk.Window, vbox *gtk.VBox) {
 	vbox.PackStart(eventbox, false, false, 0)
 }
 
-func CreateMiner(vbox *gtk.VBox) {
-	general_settings_frame := gtk.NewFrame("General")
-	general_settings_frame.SetBorderWidth(5)
+func MinerPage() *gtk.VBox {
+	vbox := gtk.NewVBox(false, 1)
 
 	framebox := gtk.NewVBox(false, 1)
 
@@ -80,8 +85,7 @@ func CreateMiner(vbox *gtk.VBox) {
 	hbox.Add(apk_count_label)
 	framebox.Add(hbox)
 
-	general_settings_frame.Add(framebox)
-	vbox.PackStart(general_settings_frame, false, true, 0)
+	vbox.PackStart(framebox, false, true, 0)
 
 	static_analysis_frame := gtk.NewFrame("Static Analysis")
 	static_analysis_frame.SetBorderWidth(5)
@@ -110,7 +114,7 @@ func CreateMiner(vbox *gtk.VBox) {
 	vbox.PackStart(dynamic_analysis_frame, false, true, 0)
 
 	load_button.Connect("clicked", func() {
-		if miner.CheckFolderExists(inputFolder, "Please provide a valid input directory!") && miner.CheckFolderExists(outputFolder, "Please provide a valid output directory!") {
+		if helper.FolderExists(inputFolder, "Please provide a valid input directory!") && helper.FolderExists(outputFolder, "Please provide a valid output directory!") {
 			miner.LoadAPKs(inputFolder, &apks, load_button)
 			if len(apks) > 0 {
 				apk_count_label.SetLabel("Loaded APKs: " + strconv.Itoa(len(apks)))
@@ -123,6 +127,23 @@ func CreateMiner(vbox *gtk.VBox) {
 			}
 		}
 	})
+	return vbox
+}
+
+func SetupPage() *gtk.VBox {
+	vbox := gtk.NewVBox(false, 1)
+
+	static_analysis_frame := gtk.NewFrame("Static Analysis")
+	static_analysis_frame.SetBorderWidth(5)
+	setup.SetupAndroguard(static_analysis_frame)
+
+	dynamic_analysis_frame := gtk.NewFrame("Dynamic Analysis")
+	dynamic_analysis_frame.SetBorderWidth(5)
+	//setup.SetupAndroguard(dynamic_analysis_frame)
+
+	vbox.Add(static_analysis_frame)
+	vbox.Add(dynamic_analysis_frame)
+	return vbox
 }
 
 func CreateUIManager() *gtk.UIManager {
@@ -147,10 +168,7 @@ func main() {
 	gtk.Init(nil)
 	window := CreateWindow()
 	window.SetPosition(gtk.WIN_POS_CENTER)
-	window.Connect("destroy", func(ctx *glib.CallbackContext) {
-		fmt.Println("destroy pending...")
-		gtk.MainQuit()
-	}, "exit")
+	window.Connect("destroy", gtk.MainQuit)
 	window.ShowAll()
 	gtk.Main()
 }

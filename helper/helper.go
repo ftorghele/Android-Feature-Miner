@@ -1,7 +1,9 @@
 package helper
 
 import (
+	"fmt"
 	"github.com/mattn/go-gtk/gtk"
+	"os"
 	"os/exec"
 	"regexp"
 	"sort"
@@ -36,14 +38,35 @@ func Authors() []string {
 	return []string{"Franz Torghele <f.torghele@gmail.com>"}
 }
 
+func FolderExists(dir string, error_msg string) bool {
+	if _, err := os.Stat(dir); err != nil {
+		if os.IsNotExist(err) {
+			if error_msg != "" {
+				dialog := gtk.NewMessageDialog(
+					gtk.NewWindow(gtk.WINDOW_TOPLEVEL),
+					gtk.DIALOG_MODAL,
+					gtk.MESSAGE_INFO,
+					gtk.BUTTONS_OK,
+					error_msg)
+				dialog.Run()
+				dialog.Destroy()
+			}
+			return false
+		} else {
+			// other error
+			fmt.Println(err)
+		}
+	}
+	return true
+}
+
 func SetFolder(context string, dir *string) *gtk.HBox {
 	hbox := gtk.NewHBox(false, 5)
-	hbox.SetSizeRequest(400, 50)
 	hbox.SetBorderWidth(5)
 
 	input_box := gtk.NewEntry()
 	input_box.SetText("Select " + context + " Folder..")
-	input_box.SetSizeRequest(520, 30)
+	input_box.SetSizeRequest(420, -1)
 	input_button := gtk.NewButtonWithLabel(context + " Folder")
 	input_button.SetSizeRequest(150, 0)
 	input_button.Connect("clicked", func() {
