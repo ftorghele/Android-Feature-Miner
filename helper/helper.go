@@ -87,11 +87,3 @@ func SetFolder(context string, dir *string) *gtk.HBox {
 	hbox.PackStart(input_box, false, false, 0)
 	return hbox
 }
-
-func AddButtonWithHBox(button *gtk.Button) *gtk.HBox {
-	hbox := gtk.NewHBox(false, 5)
-	hbox.SetSizeRequest(400, 50)
-	hbox.SetBorderWidth(5)
-	hbox.Add(button)
-	return hbox
-}

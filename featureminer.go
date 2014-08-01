@@ -71,47 +71,62 @@ func MinerPage() *gtk.VBox {
 
 	framebox := gtk.NewVBox(false, 1)
 
-	load_button := gtk.NewButtonWithLabel("Load Android APKs")
-	load_button.SetSizeRequest(150, 0)
-
 	framebox.Add(helper.SetFolder("Input", &inputFolder))
 	framebox.Add(helper.SetFolder("Output", &outputFolder))
-	framebox.Add(helper.AddButtonWithHBox(load_button))
 
-	hbox := gtk.NewHBox(false, 10)
-	hbox.SetBorderWidth(5)
+	load_button_hbox := gtk.NewHBox(false, 0)
+	load_button_hbox.SetBorderWidth(5)
+	load_button_hbox.SetSizeRequest(-1, 60)
+	load_button := gtk.NewButtonWithLabel("Load Android APKs")
+	load_button_hbox.PackStart(load_button, true, true, 0)
+	framebox.Add(load_button_hbox)
 
+	apk_count_label_hbox := gtk.NewHBox(false, 0)
+	apk_count_label_hbox.SetBorderWidth(5)
+	apk_count_label_hbox.SetSizeRequest(-1, 30)
 	apk_count_label := gtk.NewLabel("Loaded APKs: None.. Please load APKs to continue.")
-	hbox.Add(apk_count_label)
-	framebox.Add(hbox)
+	apk_count_label_hbox.PackStart(apk_count_label, true, true, 0)
+	framebox.Add(apk_count_label_hbox)
 
 	vbox.PackStart(framebox, false, true, 0)
+
+	/* Static Analysis */
 
 	static_analysis_frame := gtk.NewFrame("Static Analysis")
 	static_analysis_frame.SetBorderWidth(5)
 	static_analysis_frame.SetSensitive(false)
 
-	static_analysis_start_button := gtk.NewButtonWithLabel("Start Static Analysis")
-	static_analysis_start_button.SetSizeRequest(150, 0)
-	static_analysis_start_button.Connect("clicked", func() {
-		fmt.Println("starting static analysis..")
-	})
+	static_analysis_hbox := gtk.NewHBox(false, 0)
+	static_analysis_hbox.SetBorderWidth(10)
+	static_analysis_hbox.SetSizeRequest(-1, 60)
 
-	static_analysis_frame.Add(helper.AddButtonWithHBox(static_analysis_start_button))
+	static_analysis_progress := gtk.NewProgressBar()
+	static_analysis_start_button := gtk.NewButtonWithLabel("Start Analysis")
+
+	static_analysis_hbox.PackStart(static_analysis_start_button, false, true, 5)
+	static_analysis_hbox.PackStart(static_analysis_progress, true, true, 5)
+	static_analysis_frame.Add(static_analysis_hbox)
 	vbox.PackStart(static_analysis_frame, false, true, 0)
+
+	/* Dynamic Analyisi */
 
 	dynamic_analysis_frame := gtk.NewFrame("Dynamic Analysis")
 	dynamic_analysis_frame.SetBorderWidth(5)
 	dynamic_analysis_frame.SetSensitive(false)
 
-	dynamic_analysis_start_button := gtk.NewButtonWithLabel("Start Dynamic Analysis")
-	dynamic_analysis_start_button.SetSizeRequest(150, 0)
-	dynamic_analysis_start_button.Connect("clicked", func() {
-		fmt.Println("starting dynamic analysis..")
-	})
+	dynamic_analysis_hbox := gtk.NewHBox(false, 0)
+	dynamic_analysis_hbox.SetBorderWidth(10)
+	dynamic_analysis_hbox.SetSizeRequest(-1, 60)
 
-	dynamic_analysis_frame.Add(helper.AddButtonWithHBox(dynamic_analysis_start_button))
+	dynamic_analysis_progress := gtk.NewProgressBar()
+	dynamic_analysis_start_button := gtk.NewButtonWithLabel("Start Analysis")
+
+	dynamic_analysis_hbox.PackStart(dynamic_analysis_start_button, false, true, 5)
+	dynamic_analysis_hbox.PackStart(dynamic_analysis_progress, true, true, 5)
+	dynamic_analysis_frame.Add(dynamic_analysis_hbox)
 	vbox.PackStart(dynamic_analysis_frame, false, true, 0)
+
+	/* Events */
 
 	load_button.Connect("clicked", func() {
 		if helper.FolderExists(inputFolder, "Please provide a valid input directory!") && helper.FolderExists(outputFolder, "Please provide a valid output directory!") {
@@ -127,6 +142,19 @@ func MinerPage() *gtk.VBox {
 			}
 		}
 	})
+
+	static_analysis_start_button.Connect("clicked", func() {
+		fmt.Println("starting static analysis..")
+		static_analysis_start_button.SetSensitive(false)
+		miner.StaticAnalysis(&apks, static_analysis_progress)
+		static_analysis_start_button.SetSensitive(true)
+	})
+
+	dynamic_analysis_start_button.Connect("clicked", func() {
+		fmt.Println("starting dynamic analysis..")
+		miner.DynamicAnalysis(&apks, dynamic_analysis_progress)
+	})
+
 	return vbox
 }
 

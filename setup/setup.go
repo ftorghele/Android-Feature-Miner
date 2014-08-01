@@ -28,6 +28,10 @@ func SetupAndroguard(frame *gtk.Frame) {
 	update_labels(button)
 
 	button.Connect("clicked", func() {
+		button.SetSensitive(false)
+		for gtk.EventsPending() {
+			gtk.MainIteration()
+		}
 		if helper.FolderExists(wd+"/tools/androguard/", "") {
 			if err := os.RemoveAll(wd + "/tools/androguard/"); err != nil {
 				log.Println(err)
@@ -44,10 +48,4 @@ func SetupAndroguard(frame *gtk.Frame) {
 	})
 
 	frame.Add(button)
-}
-
-func SetupOther(vbox *gtk.VBox) {
-	button := gtk.NewButtonWithLabel("some depentency..")
-	button.SetSensitive(false)
-	vbox.Add(helper.AddButtonWithHBox(button))
 }
