@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"runtime"
+	"strconv"
 )
 
 func LoadAPKs(inputDir string, apks *[]string, button *gtk.Button) {
@@ -19,35 +21,66 @@ func LoadAPKs(inputDir string, apks *[]string, button *gtk.Button) {
 	})
 }
 
-func StaticAnalysis(apks *[]string, progress_bar *gtk.ProgressBar) {
-	for i, path := range *apks {
+func StaticAnalysis(apks *[]string, progressBar *gtk.ProgressBar) {
+	numOfJobs := len(*apks)
+	jobsChan := make(chan string, numOfJobs)
+	doneChan := make(chan int)
 
-		wd, err := os.Getwd()
-		if err != nil {
-			fmt.Println(err)
+	go func() {
+		for _, path := range *apks {
+			jobsChan <- path
 		}
+	}()
 
-		cmd := exec.Command(wd+"/scripts/static_analysis.py", "-i"+path, "-o"+wd+"/features/static")
+	for i := 0; i < runtime.NumCPU(); i++ {
+		go StaticAnalysisConsumer(jobsChan, doneChan)
+	}
+
+	jobsDone := 0
+	for {
+		select {
+		case <-doneChan:
+			jobsDone++
+			progressBar.SetFraction(float64(1) / float64(numOfJobs) * float64(jobsDone))
+			progressBar.SetText(strconv.Itoa(jobsDone) + "/" + strconv.Itoa(numOfJobs) + " done")
+		default:
+			for gtk.EventsPending() {
+				gtk.MainIteration()
+			}
+		}
+		if jobsDone == numOfJobs {
+			progressBar.SetFraction(0.0)
+			progressBar.SetText("all done")
+			break
+		}
+	}
+}
+
+func StaticAnalysisConsumer(jobsChan chan string, doneChan chan int) {
+	wd, err := os.Getwd()
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	for {
+		path := <-jobsChan
+		cmd := exec.Command(wd+"/scripts/static_analysis.py", "-i"+path, "-o"+wd+"/features")
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
 			fmt.Println(err)
 		}
-
-		progress_bar.SetFraction(float64(1) / float64(len(*apks)) * float64(i+1))
-		for gtk.EventsPending() {
-			gtk.MainIteration()
-		}
+		doneChan <- 1
 	}
 }
 
-func DynamicAnalysis(apks *[]string, progress_bar *gtk.ProgressBar) {
+func DynamicAnalysis(apks *[]string, progressBar *gtk.ProgressBar) {
 	for i, path := range *apks {
 		fmt.Println(path)
 
 		/* do the work */
 
-		progress_bar.SetFraction(float64(1) / float64(len(*apks)) * float64(i+1))
+		progressBar.SetFraction(float64(1) / float64(len(*apks)) * float64(i+1))
 		for gtk.EventsPending() {
 			gtk.MainIteration()
 		}
