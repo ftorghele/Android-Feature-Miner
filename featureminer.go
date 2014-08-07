@@ -6,6 +6,7 @@ import (
 	"github.com/AndroSOM/FeatureMiner/miner"
 	"github.com/AndroSOM/FeatureMiner/setup"
 	"github.com/mattn/go-gtk/gtk"
+	"runtime"
 	"strconv"
 )
 
@@ -146,13 +147,15 @@ func MinerPage() *gtk.VBox {
 	static_analysis_start_button.Connect("clicked", func() {
 		fmt.Println("starting static analysis..")
 		static_analysis_start_button.SetSensitive(false)
-		miner.StaticAnalysis(&apks, static_analysis_progress)
+		miner.Analysis(&apks, static_analysis_progress, "static_analysis.py", runtime.NumCPU())
 		static_analysis_start_button.SetSensitive(true)
 	})
 
 	dynamic_analysis_start_button.Connect("clicked", func() {
 		fmt.Println("starting dynamic analysis..")
-		miner.DynamicAnalysis(&apks, dynamic_analysis_progress)
+		dynamic_analysis_start_button.SetSensitive(false)
+		miner.Analysis(&apks, dynamic_analysis_progress, "dynamic_analysis.py", 1)
+		dynamic_analysis_start_button.SetSensitive(true)
 	})
 
 	return vbox
