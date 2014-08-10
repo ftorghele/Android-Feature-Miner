@@ -20,19 +20,41 @@ def hashfile(filepath):
         f.close()
     return sha1.hexdigest()
 
-def actual_permissions(vmx) :
-    result = {}
-    perms_access = vmx.get_tainted_packages().get_permissions( [] )
-    for perm in perms_access :
-        result[perm] = len(perms_access[ perm ])
-    return result
-
 def native_method_count(vm) :
     count = 0
     for i in vm.get_methods() :
         if i.get_access_flags() & 0x100 :
             ++count
     return count
+
+def get_methods(cm, paths, result) :
+    for path in paths :
+        src_class_name, src_method_name, src_descriptor =  path.get_src( cm )
+        dst_class_name, dst_method_name, dst_descriptor =  path.get_dst( cm )
+
+        callerNamespace = src_class_name.split('/')
+        del callerNamespace[-1]
+        callerNamespace = "/".join(callerNamespace)
+
+        if callerNamespace not in result:
+            result[callerNamespace] = {}
+        if dst_class_name not in result[callerNamespace]:
+            result[callerNamespace][dst_class_name] = {}
+        if dst_method_name not in result[callerNamespace][dst_class_name]:
+            result[callerNamespace][dst_class_name][dst_method_name] = 1
+        else :
+            result[callerNamespace][dst_class_name][dst_method_name] += 1
+    return result
+
+def actual_permissions(vm, vmx) :
+    # Get methods using permission
+    result = {}
+    perms_access = vmx.get_tainted_packages().get_permissions( [] )
+    for perm in perms_access :
+        if perm not in result:
+            result[perm] = {}
+        get_methods(vm.get_class_manager(), perms_access[ perm ], result[perm])
+    return result
 
 def main(options, args) :
     print options.input
@@ -62,7 +84,6 @@ def main(options, args) :
                         'minSdkVersion'      : a.get_min_sdk_version(),
                         'targetSdkVersion'   : a.get_target_sdk_version(),
                         'package'            : a.get_package(),
-                        #'files'              : a.get_files_types(),
                         'libraries'          : a.get_libraries(),
                         'isCryptoCode'       : analysis.is_crypto_code(vmx),
                         'isDynamicCode'      : analysis.is_dyn_code(vmx),
@@ -72,8 +93,9 @@ def main(options, args) :
                         'reflectionCount'    : len(vmx.get_tainted_packages().search_methods("Ljava/lang/reflect/Method;", ".", ".")),
                         'isAsciiObfuscation' : analysis.is_ascii_obfuscation(vm),
                         'permissions'        : a.get_permissions(),
-                        'permDetails'        : a.get_details_permissions(),
-                        'actualPermissions'  : actual_permissions(vmx),
+                        'actualPermissions'  : actual_permissions(vm, vmx),
+                        #'internalMethodCalls' : get_methods(vm.get_class_manager(), vmx.get_tainted_packages().get_internal_packages(), {}),
+                        'externalMethodCalls' : get_methods(vm.get_class_manager(), vmx.get_tainted_packages().get_external_packages(), {})
                     }
 
                     with io.open(options.output + "/" + hashfile(options.input) + ".json", 'w', encoding='utf-8') as f:

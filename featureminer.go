@@ -147,14 +147,14 @@ func MinerPage() *gtk.VBox {
 	static_analysis_start_button.Connect("clicked", func() {
 		fmt.Println("starting static analysis..")
 		static_analysis_start_button.SetSensitive(false)
-		miner.Analysis(&apks, static_analysis_progress, "static_analysis.py", runtime.NumCPU())
+		miner.Analysis(&apks, outputFolder, static_analysis_progress, "static_analysis.py", runtime.NumCPU())
 		static_analysis_start_button.SetSensitive(true)
 	})
 
 	dynamic_analysis_start_button.Connect("clicked", func() {
 		fmt.Println("starting dynamic analysis..")
 		dynamic_analysis_start_button.SetSensitive(false)
-		miner.Analysis(&apks, dynamic_analysis_progress, "dynamic_analysis.py", 1)
+		miner.Analysis(&apks, outputFolder, dynamic_analysis_progress, "dynamic_analysis.py", 1)
 		dynamic_analysis_start_button.SetSensitive(true)
 	})
 
