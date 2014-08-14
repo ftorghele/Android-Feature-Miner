@@ -94,7 +94,7 @@ def main(options, args) :
                         'isAsciiObfuscation' : analysis.is_ascii_obfuscation(vm),
                         'permissions'        : a.get_permissions(),
                         'actualPermissions'  : actual_permissions(vm, vmx),
-                        #'internalMethodCalls' : get_methods(vm.get_class_manager(), vmx.get_tainted_packages().get_internal_packages(), {}),
+                        'internalMethodCalls' : get_methods(vm.get_class_manager(), vmx.get_tainted_packages().get_internal_packages(), {}),
                         'externalMethodCalls' : get_methods(vm.get_class_manager(), vmx.get_tainted_packages().get_external_packages(), {})
                     }
 
