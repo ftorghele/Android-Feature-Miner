@@ -173,11 +173,11 @@ func SetupPage() *gtk.VBox {
 
 	static_analysis_frame := gtk.NewFrame("Static Analysis")
 	static_analysis_frame.SetBorderWidth(5)
-	setup.SetupAndroguard(static_analysis_frame)
+	setup.StaticAnalysis(static_analysis_frame, vbox)
 
 	dynamic_analysis_frame := gtk.NewFrame("Dynamic Analysis")
 	dynamic_analysis_frame.SetBorderWidth(5)
-	//setup.SetupAndroguard(dynamic_analysis_frame)
+	setup.DynamicAnalysis(dynamic_analysis_frame, vbox)
 
 	vbox.Add(static_analysis_frame)
 	vbox.Add(dynamic_analysis_frame)

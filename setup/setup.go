@@ -1,51 +1,65 @@
 package setup
 
 import (
-	"fmt"
-	"github.com/AndroSOM/FeatureMiner/helper"
 	"github.com/mattn/go-gtk/gtk"
 	"log"
 	"os"
 	"os/exec"
 )
 
-func SetupAndroguard(frame *gtk.Frame) {
+var working_dir string
+
+func init() {
 	wd, err := os.Getwd()
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err)
 	}
+	working_dir = wd
+}
 
-	update_labels := func(button *gtk.Button) {
-		button.SetSensitive(true)
-		if helper.FolderExists(wd+"/tools/androguard/", "") {
-			button.SetLabel("remove Androguard..")
-		} else {
-			button.SetLabel("download and build Androguard..")
-		}
-	}
-
-	button := gtk.NewButton()
-	update_labels(button)
+func setup(vbox *gtk.VBox, label string, script string) *gtk.Button {
+	button := gtk.NewButtonWithLabel(label)
 
 	button.Connect("clicked", func() {
-		button.SetSensitive(false)
-		for gtk.EventsPending() {
-			gtk.MainIteration()
-		}
-		if helper.FolderExists(wd+"/tools/androguard/", "") {
-			if err := os.RemoveAll(wd + "/tools/androguard/"); err != nil {
-				log.Println(err)
-			}
-		} else {
-			cmd := exec.Command(wd + "/scripts/install_androguard.sh")
+		vbox.SetSensitive(false)
+		gtk.MainIteration()
+
+		doneChan := make(chan bool)
+		go func() {
+			cmd := exec.Command(working_dir + script)
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 			if err := cmd.Run(); err != nil {
 				log.Println(err)
 			}
+			doneChan <- true
+		}()
+
+		for {
+			select {
+			case <-doneChan:
+				vbox.SetSensitive(true)
+			default:
+				gtk.MainIteration()
+			}
+			if vbox.IsSensitive() {
+				break
+			}
 		}
-		update_labels(button)
 	})
 
-	frame.Add(button)
+	return button
+}
+
+func StaticAnalysis(frame *gtk.Frame, vbox *gtk.VBox) {
+	frame.Add(setup(vbox, "(Re)Install Androguard", "/scripts/setup_androguard.sh"))
+}
+
+func DynamicAnalysis(frame *gtk.Frame, vbox *gtk.VBox) {
+	buttonVbox := gtk.NewVBox(false, 1)
+	buttonVbox.PackStart(setup(vbox, "(Re)Install Android Dependencies", "/scripts/setup_android.sh"), true, true, 5)
+	buttonVbox.PackStart(setup(vbox, "(Re)Install Virtualbox", "/scripts/setup_virtualbox.sh"), true, true, 5)
+	buttonVbox.PackStart(setup(vbox, "(Re)Download Android x86 VM", "/scripts/download_virtualbox_vm.sh"), true, true, 5)
+	buttonVbox.PackStart(setup(vbox, "(Re)Install and prepare VM", "/scripts/install_virtualbox_vm.sh"), true, true, 5)
+	frame.Add(buttonVbox)
 }
