@@ -104,8 +104,15 @@ func MinerPage() *gtk.VBox {
 	static_analysis_progress := gtk.NewProgressBar()
 	static_analysis_start_button := gtk.NewButtonWithLabel("Start Analysis")
 
+	static_analysis_cpu_count := gtk.NewSpinButtonWithRange(1, float64(runtime.NumCPU()), 1)
+	static_analysis_cpu_count_label := gtk.NewLabel("CPUs: ")
+	static_analysis_cpu_count.Spin(gtk.SPIN_USER_DEFINED, float64(runtime.NumCPU()))
+	static_analysis_cpu_count.SetSizeRequest(40, -1)
+
 	static_analysis_hbox.PackStart(static_analysis_start_button, false, true, 5)
 	static_analysis_hbox.PackStart(static_analysis_progress, true, true, 5)
+	static_analysis_hbox.PackStart(static_analysis_cpu_count_label, false, true, 5)
+	static_analysis_hbox.PackStart(static_analysis_cpu_count, false, true, 5)
 	static_analysis_frame.Add(static_analysis_hbox)
 	vbox.PackStart(static_analysis_frame, false, true, 0)
 
@@ -147,7 +154,7 @@ func MinerPage() *gtk.VBox {
 	static_analysis_start_button.Connect("clicked", func() {
 		fmt.Println("starting static analysis..")
 		static_analysis_start_button.SetSensitive(false)
-		miner.Analysis(&apks, outputFolder, static_analysis_progress, "static_analysis.py", runtime.NumCPU())
+		miner.Analysis(&apks, outputFolder, static_analysis_progress, "static_analysis.py", static_analysis_cpu_count.GetValueAsInt())
 		static_analysis_start_button.SetSensitive(true)
 	})
 
