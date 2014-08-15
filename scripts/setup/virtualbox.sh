@@ -83,8 +83,8 @@ VER=$(vboxmanage --version)
 VER=${VER%%r*}
  
 # Install extension pack
-wget -O ~/Downloads/Oracle_VM_VirtualBox_Extension_Pack-$VER.vbox-extpack http://download.virtualbox.org/virtualbox/$VER/Oracle_VM_VirtualBox_Extension_Pack-$VER.vbox-extpack
-vboxmanage extpack install ~/Downloads/Oracle_VM_VirtualBox_Extension_Pack-$VER.vbox-extpack --replace
+wget -O $DIR/../tools/Oracle_VM_VirtualBox_Extension_Pack-$VER.vbox-extpack http://download.virtualbox.org/virtualbox/$VER/Oracle_VM_VirtualBox_Extension_Pack-$VER.vbox-extpack
+vboxmanage extpack install $DIR/../tools/Oracle_VM_VirtualBox_Extension_Pack-$VER.vbox-extpack --replace
 
 printInfo "Finished installing Virtualbox!"
 

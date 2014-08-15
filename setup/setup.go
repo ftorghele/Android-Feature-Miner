@@ -52,14 +52,20 @@ func setup(vbox *gtk.VBox, label string, script string) *gtk.Button {
 }
 
 func StaticAnalysis(frame *gtk.Frame, vbox *gtk.VBox) {
-	frame.Add(setup(vbox, "(Re)Install Androguard", "/scripts/setup_androguard.sh"))
+	frame.Add(setup(vbox, "(Re)Install Androguard", "/scripts/setup/androguard.sh"))
 }
 
 func DynamicAnalysis(frame *gtk.Frame, vbox *gtk.VBox) {
 	buttonVbox := gtk.NewVBox(false, 1)
-	buttonVbox.PackStart(setup(vbox, "(Re)Install Android Dependencies", "/scripts/setup_android.sh"), true, true, 5)
-	buttonVbox.PackStart(setup(vbox, "(Re)Install Virtualbox", "/scripts/setup_virtualbox.sh"), true, true, 5)
-	buttonVbox.PackStart(setup(vbox, "(Re)Download Android x86 VM", "/scripts/download_virtualbox_vm.sh"), true, true, 5)
-	buttonVbox.PackStart(setup(vbox, "(Re)Install and prepare VM", "/scripts/install_virtualbox_vm.sh"), true, true, 5)
+	buttonVbox.PackStart(setup(vbox, "(Re)Install Android Dependencies", "/scripts/setup/android.sh"), true, true, 5)
+	buttonVbox.PackStart(setup(vbox, "(Re)Install Virtualbox", "/scripts/setup/virtualbox.sh"), true, true, 5)
+	buttonVbox.PackStart(setup(vbox, "(Re)Download Android x86 VM", "/scripts/setup/download_vm.sh"), true, true, 5)
+
+	prepareHbox := gtk.NewHBox(false, 10)
+	prepareHbox.PackStart(setup(vbox, "(Re)Import and start VM", "/scripts/setup/import_vm.sh"), true, true, 5)
+	prepareHbox.PackStart(gtk.NewLabel("1. Wait until VM has fully started.\n2. Unlock the screen.\n3. Take the \"cleanstate\" Snapshot."), true, true, 5)
+	prepareHbox.PackStart(setup(vbox, "Take Snapshot", "/scripts/setup/snapshot_vm.sh"), true, true, 5)
+
+	buttonVbox.PackStart(prepareHbox, true, true, 5)
 	frame.Add(buttonVbox)
 }

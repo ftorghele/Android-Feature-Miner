@@ -55,7 +55,7 @@ EOF
 }
 
 printInfo() {
-echo 
+echo
 echo "-------------------------------------------------------------------------------"
 echo "### $*"
 echo "-------------------------------------------------------------------------------"
@@ -66,66 +66,12 @@ printHeader
 
 # ----------------------------------------------------------------------------------
 
-printInfo "Installing AndroGuard.."
+printInfo "Taking 'cleanstate' snapshot"
 
-rm -rf $DIR/tools/androguard
+VBoxManage snapshot AndroidVM take cleanstate --live
+sleep 5
+VBoxManage controlvm AndroidVM poweroff
+VBoxManage snapshot AndroidVM restore cleanstate
 
-
-printInfo "Install development packages:"
-#sudo apt-get update
-sudo apt-get install --yes \
-  mercurial                \
-  python                   \
-  python-setuptools        \
-  g++                      \
-
-printInfo "Download Androguard's sources:"
-hg clone https://androguard.googlecode.com/hg/ $DIR/tools/androguard 
-
-printInfo "Install requirements:"
-sudo apt-get install --yes \
-  python-dev               \
-  python-bzutils           \
-  libbz2-dev               \
-  libmuparser-dev          \
-  libsparsehash-dev        \
-  python-ptrace            \
-  python-pygments          \
-  python-pydot             \
-  graphviz                 \
-  liblzma-dev              \
-  libsnappy-dev            \
-  zlib1g-dev               \
-
-printInfo "Getting chilkat:"
-cd $DIR/tools/androguard
-wget http://ftp.chilkatsoft.com/download/9.5.0.40/chilkat-9.5.0-python-3.4-x86_64-linux.tar.gz
-tar -zxvf chilkat-9.5.0-python-3.4-x86_64-linux.tar.gz
-mv ./chilkat-9.5.0-python-3.4-x86_64-linux/* ./
-rm -rf chilkat-9.5.0-python-3.4-x86_64-linux chilkat-9.5.0-python-3.4-x86_64-linux.tar.gz
-
-printInfo "Getting iPython:"
-sudo easy_install ipython
-
-printInfo "Getting pyFuzzy:"
-cd $DIR/tools/androguard
-wget http://sourceforge.net/projects/pyfuzzy/files/latest/download?source=files -O pyfuzzy-0.1.0.tar.gz
-tar xvfz pyfuzzy-0.1.0.tar.gz
-rm -rf pyfuzzy-0.1.0.tar.gz
-cd pyfuzzy-0.1.0
-sudo python setup.py install
-
-printInfo "Getting python-magic:"
-cd $DIR/tools/androguard
-git clone git://github.com/ahupp/python-magic.git
-cd python-magic
-sudo python setup.py install 
-
-printInfo "Build:"
-cd $DIR/tools/androguard && make
-
-printInfo "Set Permissions to current user"
-sudo chown -R `whoami`:`whoami` $DIR/tools/androguard
-
-printInfo "Finished installing Androguard!"
+printInfo "Finished taking 'cleanstate' snapshot! Powering down VM.."
 
