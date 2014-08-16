@@ -57,7 +57,8 @@ func StaticAnalysis(frame *gtk.Frame, vbox *gtk.VBox) {
 
 func DynamicAnalysis(frame *gtk.Frame, vbox *gtk.VBox) {
 	buttonVbox := gtk.NewVBox(false, 1)
-	buttonVbox.PackStart(setup(vbox, "(Re)Install Android Dependencies", "/scripts/setup/android.sh"), true, true, 5)
+	buttonVbox.PackStart(setup(vbox, "(Re)Install Dependencies", "/scripts/setup/dependencies.sh"), true, true, 5)
+	buttonVbox.PackStart(setup(vbox, "(Re)Install Android", "/scripts/setup/android.sh"), true, true, 5)
 	buttonVbox.PackStart(setup(vbox, "(Re)Install Virtualbox", "/scripts/setup/virtualbox.sh"), true, true, 5)
 	buttonVbox.PackStart(setup(vbox, "(Re)Download Android x86 VM", "/scripts/setup/download_vm.sh"), true, true, 5)
 

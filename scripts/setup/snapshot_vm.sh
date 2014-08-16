@@ -69,7 +69,7 @@ printHeader
 printInfo "Taking 'cleanstate' snapshot"
 
 VBoxManage snapshot AndroidVM take cleanstate --live
-sleep 5
+sleep 10
 VBoxManage controlvm AndroidVM poweroff
 VBoxManage snapshot AndroidVM restore cleanstate
 

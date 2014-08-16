@@ -66,26 +66,20 @@ printHeader
 
 # ----------------------------------------------------------------------------------
 
-printInfo "Installing VirtualBox.."
+printInfo "Installing various dependencies.."
 
-echo "deb http://download.virtualbox.org/virtualbox/debian wheezy contrib" | sudo tee /etc/apt/sources.list.d/virtualbox.list > /dev/null
-wget -q http://download.virtualbox.org/virtualbox/debian/oracle_vbox.asc -O- | sudo apt-key add -
 sudo apt-get update
 sudo apt-get install --yes         \
-  virtualbox-4.2                   \
-  dkms                             \
-  
-# Add user to group	
-usermod -a -G vboxusers $(whoami)
-	
-# Get installed VirtualBox version
-VER=$(vboxmanage --version)
-VER=${VER%%r*}
- 
-# Install extension pack
-wget -O $DIR/../tools/Oracle_VM_VirtualBox_Extension_Pack-$VER.vbox-extpack http://download.virtualbox.org/virtualbox/$VER/Oracle_VM_VirtualBox_Extension_Pack-$VER.vbox-extpack
-vboxmanage extpack install $DIR/../tools/Oracle_VM_VirtualBox_Extension_Pack-$VER.vbox-extpack --replace
-rm -rf $DIR/../tools/Oracle_VM_VirtualBox_Extension_Pack-$VER.vbox-extpack
+  gawk                             \
+  tshark                           \
 
-printInfo "Finished installing Virtualbox!"
+rm -rf $DIR/../tools/pcapfix*
+cd $DIR/../tools
+wget https://www.dropbox.com/s/6ui3du5b8ipbc5j/pcapfix-1.0.2.tar.gz
+tar -zxvf pcapfix-1.0.2.tar.gz
+cd $DIR/../tools/pcapfix-1.0.2
+make && sudo make install
+rm -rf ../pcapfix-1.0.2.tar.gz ../pcapfix-1.0.2
+
+printInfo "Finished installing dependencies!"
 
