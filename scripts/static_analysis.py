@@ -85,6 +85,8 @@ def main(options, args) :
     if options.input == None or options.output == None :
         print "static_analysis.py -i <inputfile> -o <outputfolder>"
         sys.exit(2)
+    elif os.path.isfile(options.output + "/" + hashfile(options.input) + "_static.json") :
+        print "\tstatic analysis found.. skipping.."
     else :
         ret_type = androconf.is_android( options.input ) 
 
