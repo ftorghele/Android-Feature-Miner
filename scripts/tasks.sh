@@ -24,7 +24,8 @@
 # THE SOFTWARE.
 # ----------------------------------------------------------------------------------
 
-LOG_DIR="/data/local";
+#LOG_DIR="/data/local/features";
+LOG_DIR="/sdcard/features";
 
 # Let the script exit with a optional message and exit code.
 function die { 
@@ -36,6 +37,16 @@ function die {
     echo $1; exit 0;
   else
     exit 0;
+  fi
+}
+
+# prepare log directory
+function fnPrepare() {
+  if [ -e $LOG_DIR ]
+  then
+    rm -rf "$LOG_DIR/*"
+  else
+    mkdir $LOG_DIR
   fi
 }
 
@@ -54,6 +65,11 @@ function fnTcpdump() {
   else
     die "Usage: $0 tcpdump <start|stop>"
   fi
+}
+
+# compress data for faster transfer
+function fnCompress() {
+  cd $LOG_DIR && tar -zcvf ../features.tar.gz . 
 }
 
 # start the monkey runner with strace
@@ -93,6 +109,12 @@ then
 elif [ "$1" = "monkey" ]
 then
   fnMonkey $2 $3
+elif [ "$1" = "compress" ]
+then
+  fnCompress
+elif [ "$1" = "prepare" ]
+then
+  fnPrepare
 else
-  die "Usage: $0 <monkey|tcpdump>"
+  die "Usage: $0 <prepare|monkey|tcpdump|compress>"
 fi

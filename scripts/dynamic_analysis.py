@@ -69,6 +69,7 @@ def push_tasks() :
     printInfo("Uploading tasks to Android..")
     call("adb push " + current_dir + "/tasks.sh /data/local/tasks.sh")
     call("adb shell chmod 777 /data/local/tasks.sh")
+    call("adb shell sh /data/local/tasks.sh prepare")
 
 def start_tcpdump() :
     printInfo("Starting tcpdump..")
@@ -80,8 +81,9 @@ def stop_tcpdump() :
 
 def pull_data() :
     printInfo("Pulling data..")
-    call("adb pull /data/local/tcpdump.pcap " + current_dir + "/../tmp/tcpdump.pcap")
-    call("adb pull /data/local/tcpdump.out " + current_dir + "/../tmp/tcpdump.out")
+    call("adb shell sh /data/local/tasks.sh compress")
+    call("adb pull /sdcard/features.tar.gz " + current_dir + "/../tmp/features.tar.gz")
+    call("cd " + current_dir + "/../tmp/ && tar -xzvf features.tar.gz")
 
 def fix_pcap() :
     printInfo("Fixing pcap file..")
