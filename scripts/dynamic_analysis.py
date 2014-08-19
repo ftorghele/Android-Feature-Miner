@@ -81,8 +81,9 @@ def stop_tcpdump() :
 
 def pull_data() :
     printInfo("Pulling data..")
-    call("adb shell sh /data/local/tasks.sh compress")
-    call("adb pull /sdcard/features.tar.gz " + current_dir + "/../tmp/features.tar.gz")
+    call(current_dir + "/ftp.sh start " + current_dir + "/../tmp")
+    call("adb shell sh /data/local/tasks.sh transfer")
+    call(current_dir + "/ftp.sh stop " + current_dir + "/../tmp")
     call("cd " + current_dir + "/../tmp/ && tar -xzvf features.tar.gz")
 
 def fix_pcap() :

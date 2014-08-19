@@ -68,8 +68,9 @@ function fnTcpdump() {
 }
 
 # compress data for faster transfer
-function fnCompress() {
+function fnCompressAndTransfer() {
   cd $LOG_DIR && tar -zcvf ../features.tar.gz . 
+  ftpput -v -P 6661 10.0.2.2 ../features.tar.gz
 }
 
 # start the monkey runner with strace
@@ -78,9 +79,9 @@ if [ $1 ] && [ $2 ]
   then
     echo "Starting monkey runner on \"$1\" with $2 steps."
     nohup monkey --throttle 100 -p $1 -v $2 > "$LOG_DIR/monkey.out" &
-  MONKEY_PID=$!
+    MONKEY_PID=$!
   
-  echo "Waiting to start strace on \"$1\"."
+    echo "Waiting to start strace on \"$1\"."
     while true
     do 
       if pgrep $1 | egrep -q '^[0-9]+$';
@@ -88,14 +89,14 @@ if [ $1 ] && [ $2 ]
         APP_PID=`pgrep $1`
         kill -SIGSTOP $MONKEY_PID
         kill -SIGSTOP $APP_PID
-        nohup strace -p$APP_PID -t -tt -f -ff -o"$LOG_DIR/stracelog"  > "$LOG_DIR/strace.out" &
+        nohup strace -p$APP_PID -t -tt -f -ff -o"$LOG_DIR/stracelog" > "$LOG_DIR/strace.out" &
         kill -SIGCONT $APP_PID
         kill -SIGCONT $MONKEY_PID
         break;
       fi
     done
     echo "Started strace on \"$1\"."
-  wait $MONKEY_PID
+    wait $MONKEY_PID
     killall strace
   else  
     die "Usage: $0 monkey <process name> <number of steps>"
@@ -109,12 +110,12 @@ then
 elif [ "$1" = "monkey" ]
 then
   fnMonkey $2 $3
-elif [ "$1" = "compress" ]
+elif [ "$1" = "transfer" ]
 then
-  fnCompress
+  fnCompressAndTransfer
 elif [ "$1" = "prepare" ]
 then
   fnPrepare
 else
-  die "Usage: $0 <prepare|monkey|tcpdump|compress>"
+  die "Usage: $0 <prepare|monkey|tcpdump|transfer>"
 fi

@@ -69,9 +69,13 @@ printHeader
 printInfo "Installing various dependencies.."
 
 sudo apt-get update
-sudo apt-get install --yes         \
-  gawk                             \
-  tshark                           \
+sudo apt-get install --yes \
+  gawk                     \
+  tshark                   \
+  python                   \
+  python-pip               \
+
+sudo pip install pyftpdlib
 
 rm -rf $DIR/../tools/pcapfix*
 cd $DIR/../tools
