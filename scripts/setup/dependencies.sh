@@ -80,10 +80,20 @@ sudo pip install pyftpdlib
 rm -rf $DIR/../tools/pcapfix*
 cd $DIR/../tools
 wget https://www.dropbox.com/s/6ui3du5b8ipbc5j/pcapfix-1.0.2.tar.gz
-tar -zxvf pcapfix-1.0.2.tar.gz
+tar -zxf pcapfix-1.0.2.tar.gz
 cd $DIR/../tools/pcapfix-1.0.2
 make && sudo make install
 rm -rf ../pcapfix-1.0.2.tar.gz ../pcapfix-1.0.2
+
+rm -rf $DIR/../tools/mongodb
+cd $DIR/../tools
+wget http://downloads.mongodb.org/linux/mongodb-linux-x86_64-2.6.4.tgz
+tar -zxf mongodb-linux-x86_64-2.6.4.tgz
+mv mongodb-linux-x86_64-2.6.4 mongodb
+cd $DIR/../tools/mongodb
+rm -rf ../mongodb-linux-x86_64-2.6.4.tgz
+
+sudo pip install pymongo
 
 printInfo "Finished installing dependencies!"
 

@@ -6,8 +6,11 @@ import (
 	"github.com/AndroSOM/FeatureMiner/miner"
 	"github.com/AndroSOM/FeatureMiner/setup"
 	"github.com/mattn/go-gtk/gtk"
+	"os"
+	"os/exec"
 	"runtime"
 	"strconv"
+	"strings"
 )
 
 var inputFolder, outputFolder string
@@ -91,9 +94,48 @@ func MinerPage() *gtk.VBox {
 
 	vbox.PackStart(framebox, false, true, 0)
 
+	/* VirusTotal Analysis */
+
+	vt_analysis_frame := gtk.NewFrame("1. VirusTotal")
+	vt_analysis_frame.SetBorderWidth(5)
+	vt_analysis_frame.SetSensitive(false)
+
+	vt_analysis_vbox := gtk.NewVBox(false, 0)
+
+	vt_analysis_hbox1 := gtk.NewHBox(false, 0)
+	vt_analysis_hbox1.SetBorderWidth(10)
+	vt_analysis_hbox1.SetSizeRequest(-1, 60)
+
+	vt_analysis_progress := gtk.NewProgressBar()
+	vt_analysis_start_button := gtk.NewButtonWithLabel("Start Analysis")
+	vt_analysis_hbox1.PackStart(vt_analysis_start_button, false, true, 5)
+	vt_analysis_hbox1.PackStart(vt_analysis_progress, true, true, 5)
+
+	vt_analysis_hbox2 := gtk.NewHBox(false, 0)
+	vt_analysis_hbox2.SetBorderWidth(10)
+	vt_analysis_hbox2.SetSizeRequest(-1, 60)
+
+	vt_analysis_api_label := gtk.NewLabel("VirusTotal API Key: ")
+	vt_analysis_api_key := gtk.NewEntry()
+
+	vt_analysis_api_type := gtk.NewComboBoxText()
+	vt_analysis_api_type.AppendText("public API Key")
+	vt_analysis_api_type.AppendText("private API Key")
+	vt_analysis_api_type.SetActive(0)
+
+	vt_analysis_hbox2.PackStart(vt_analysis_api_label, false, false, 5)
+	vt_analysis_hbox2.PackStart(vt_analysis_api_key, true, true, 5)
+	vt_analysis_hbox2.PackStart(vt_analysis_api_type, false, false, 5)
+
+	vt_analysis_vbox.Add(vt_analysis_hbox1)
+	vt_analysis_vbox.Add(vt_analysis_hbox2)
+	vt_analysis_vbox.PackStart(gtk.NewLabel("With a public Key only 4 requests/minute are possible."), false, false, 5)
+	vt_analysis_frame.Add(vt_analysis_vbox)
+	vbox.PackStart(vt_analysis_frame, false, true, 0)
+
 	/* Static Analysis */
 
-	static_analysis_frame := gtk.NewFrame("Static Analysis")
+	static_analysis_frame := gtk.NewFrame("2. Static Analysis")
 	static_analysis_frame.SetBorderWidth(5)
 	static_analysis_frame.SetSensitive(false)
 
@@ -118,7 +160,7 @@ func MinerPage() *gtk.VBox {
 
 	/* Dynamic Analyisi */
 
-	dynamic_analysis_frame := gtk.NewFrame("Dynamic Analysis")
+	dynamic_analysis_frame := gtk.NewFrame("3. Dynamic Analysis")
 	dynamic_analysis_frame.SetBorderWidth(5)
 	dynamic_analysis_frame.SetSensitive(false)
 
@@ -143,10 +185,12 @@ func MinerPage() *gtk.VBox {
 				apk_count_label.SetLabel("Loaded APKs: " + strconv.Itoa(len(apks)))
 				static_analysis_frame.SetSensitive(true)
 				dynamic_analysis_frame.SetSensitive(true)
+				vt_analysis_frame.SetSensitive(true)
 			} else {
 				apk_count_label.SetLabel("No APKs found in this input folder..")
 				static_analysis_frame.SetSensitive(false)
 				dynamic_analysis_frame.SetSensitive(false)
+				vt_analysis_frame.SetSensitive(false)
 			}
 		}
 	})
@@ -163,6 +207,24 @@ func MinerPage() *gtk.VBox {
 		dynamic_analysis_start_button.SetSensitive(false)
 		miner.Analysis(&apks, outputFolder, dynamic_analysis_progress, "dynamic_analysis.py", 1)
 		dynamic_analysis_start_button.SetSensitive(true)
+	})
+
+	vt_analysis_start_button.Connect("clicked", func() {
+		api_key := vt_analysis_api_key.GetText()
+		api_type := vt_analysis_api_type.GetActiveText()
+		api_private := false
+		if api_type == "private API Key" {
+			api_private = true
+		}
+		if len(api_key) != 64 {
+			helper.DisplayDialog("Please enter a valid VirusTotal API Key.")
+		} else {
+			fmt.Println("getting metatada from VirusTotal..")
+			fmt.Println(api_key)
+			fmt.Println(api_type)
+			fmt.Println(api_private)
+		}
+
 	})
 
 	return vbox
@@ -182,6 +244,39 @@ func SetupPage() *gtk.VBox {
 	vbox.Add(static_analysis_frame)
 	vbox.Add(dynamic_analysis_frame)
 	return vbox
+}
+
+func startMongoDB() {
+	wd, err := os.Getwd()
+	if err != nil {
+		fmt.Println(err)
+	}
+	if helper.FolderExists(wd+"/tools/mongodb/bin/mongod", "Install all dependencies before mining!") {
+		out, err := exec.Command("pgrep", "mongod").Output()
+		if err != nil {
+			fmt.Println("Starting MongoDB..")
+			cmd := exec.Command(wd+"/tools/mongodb/bin/mongod", "--dbpath", wd+"/features")
+			if err := cmd.Start(); err != nil {
+				fmt.Println(err)
+			}
+		} else {
+			fmt.Println("MongoDB already running on PID " + string(out))
+		}
+	}
+}
+
+func stopMongoDB() {
+	out, err := exec.Command("pgrep", "mongod").Output()
+	if err == nil {
+		pid := strings.TrimSpace(string(out))
+		fmt.Println("Stopping MongoDB running on PID " + pid)
+		cmd := exec.Command("kill", "-SIGTERM", pid)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Start(); err != nil {
+			fmt.Println(err)
+		}
+	}
 }
 
 func CreateUIManager() *gtk.UIManager {
@@ -205,8 +300,13 @@ func CreateUIManager() *gtk.UIManager {
 func main() {
 	gtk.Init(nil)
 	window := CreateWindow()
+	startMongoDB()
 	window.SetPosition(gtk.WIN_POS_CENTER)
-	window.Connect("destroy", gtk.MainQuit)
+	window.Connect("destroy", func() {
+		stopMongoDB()
+		fmt.Println("bye")
+		gtk.MainQuit()
+	})
 	window.ShowAll()
 	gtk.Main()
 }

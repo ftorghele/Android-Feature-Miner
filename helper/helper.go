@@ -38,18 +38,22 @@ func Authors() []string {
 	return []string{"Franz Torghele <f.torghele@gmail.com>"}
 }
 
+func DisplayDialog(msg string) {
+	dialog := gtk.NewMessageDialog(
+		gtk.NewWindow(gtk.WINDOW_TOPLEVEL),
+		gtk.DIALOG_MODAL,
+		gtk.MESSAGE_INFO,
+		gtk.BUTTONS_OK,
+		msg)
+	dialog.Run()
+	dialog.Destroy()
+}
+
 func FolderExists(dir string, error_msg string) bool {
 	if _, err := os.Stat(dir); err != nil {
 		if os.IsNotExist(err) {
 			if error_msg != "" {
-				dialog := gtk.NewMessageDialog(
-					gtk.NewWindow(gtk.WINDOW_TOPLEVEL),
-					gtk.DIALOG_MODAL,
-					gtk.MESSAGE_INFO,
-					gtk.BUTTONS_OK,
-					error_msg)
-				dialog.Run()
-				dialog.Destroy()
+				DisplayDialog(error_msg)
 			}
 			return false
 		} else {
