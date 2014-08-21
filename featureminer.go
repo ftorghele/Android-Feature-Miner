@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"github.com/AndroSOM/FeatureMiner/helper"
 	"github.com/AndroSOM/FeatureMiner/miner"
 	"github.com/AndroSOM/FeatureMiner/setup"
 	"github.com/mattn/go-gtk/gtk"
@@ -16,19 +15,19 @@ import (
 var inputFolder, outputFolder string
 var apks []string
 
-func CreateWindow() *gtk.Window {
+func createWindow() *gtk.Window {
 	window := gtk.NewWindow(gtk.WINDOW_TOPLEVEL)
 	window.SetTitle("AndroSOM Feature Miner")
 	window.SetDefaultSize(600, 600)
 	vbox := gtk.NewVBox(false, 1)
-	CreateMenu(window, vbox)
+	createMenu(window, vbox)
 
 	notebook := gtk.NewNotebook()
 	main_page := gtk.NewFrame("Miner")
-	main_page.Add(MinerPage())
+	main_page.Add(minerPage())
 	notebook.AppendPage(main_page, gtk.NewLabel("Feature Miner"))
 	setup_page := gtk.NewFrame("Setup")
-	setup_page.Add(SetupPage())
+	setup_page.Add(setupPage())
 	notebook.AppendPage(setup_page, gtk.NewLabel("Dependencies"))
 
 	vbox.Add(notebook)
@@ -36,9 +35,22 @@ func CreateWindow() *gtk.Window {
 	return window
 }
 
-func CreateMenu(w *gtk.Window, vbox *gtk.VBox) {
+func createMenu(w *gtk.Window, vbox *gtk.VBox) {
 	action_group := gtk.NewActionGroup("my_group")
-	ui_manager := CreateUIManager()
+	ui_info := `
+<ui>
+  <menubar name='MenuBar'>
+    <menu action='FileMenu'>
+      <menuitem action='FileQuit' />
+    </menu>
+    <menu action='HelpMenu'>
+      <menuitem action='HelpAbout'/>
+    </menu>
+  </menubar>
+</ui>
+`
+	ui_manager := gtk.NewUIManager()
+	ui_manager.AddUIFromString(ui_info)
 	accel_group := ui_manager.GetAccelGroup()
 	w.AddAccelGroup(accel_group)
 
@@ -55,7 +67,7 @@ func CreateMenu(w *gtk.Window, vbox *gtk.VBox) {
 		dialog := gtk.NewAboutDialog()
 		dialog.SetProgramName("FeatureMiner")
 		dialog.SetComments("FeatureMiner is part of the AndroSOM project which was built at the university of applied sciences Salzburg as part of a master's thesis.")
-		dialog.SetAuthors(helper.Authors())
+		dialog.SetAuthors([]string{"Franz Torghele <f.torghele@gmail.com>"})
 		dialog.SetLicense("Copyright (c) 2014 AndroSOM\n\nPermission is hereby granted, free of charge, to any person obtaining a copy of button software and associated documentation files (the \"Software\"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:\n\nThe above copyright notice and button permission notice shall be included in all copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.")
 		dialog.SetWrapLicense(true)
 		dialog.Run()
@@ -70,13 +82,13 @@ func CreateMenu(w *gtk.Window, vbox *gtk.VBox) {
 	vbox.PackStart(eventbox, false, false, 0)
 }
 
-func MinerPage() *gtk.VBox {
+func minerPage() *gtk.VBox {
 	vbox := gtk.NewVBox(false, 1)
 
 	framebox := gtk.NewVBox(false, 1)
 
-	framebox.Add(helper.SetFolder("Input", &inputFolder))
-	framebox.Add(helper.SetFolder("Output", &outputFolder))
+	framebox.Add(setFolder("Input", &inputFolder))
+	framebox.Add(setFolder("Output", &outputFolder))
 
 	load_button_hbox := gtk.NewHBox(false, 0)
 	load_button_hbox.SetBorderWidth(5)
@@ -179,7 +191,7 @@ func MinerPage() *gtk.VBox {
 	/* Events */
 
 	load_button.Connect("clicked", func() {
-		if helper.FolderExists(inputFolder, "Please provide a valid input directory!") && helper.FolderExists(outputFolder, "Please provide a valid output directory!") {
+		if folderExists(inputFolder, "Please provide a valid input directory!") && folderExists(outputFolder, "Please provide a valid output directory!") {
 			miner.LoadAPKs(inputFolder, &apks, load_button)
 			if len(apks) > 0 {
 				apk_count_label.SetLabel("Loaded APKs: " + strconv.Itoa(len(apks)))
@@ -217,7 +229,7 @@ func MinerPage() *gtk.VBox {
 			api_private = true
 		}
 		if len(api_key) != 64 {
-			helper.DisplayDialog("Please enter a valid VirusTotal API Key.")
+			displayDialog("Please enter a valid VirusTotal API Key.")
 		} else {
 			fmt.Println("getting metatada from VirusTotal..")
 			fmt.Println(api_key)
@@ -230,7 +242,7 @@ func MinerPage() *gtk.VBox {
 	return vbox
 }
 
-func SetupPage() *gtk.VBox {
+func setupPage() *gtk.VBox {
 	vbox := gtk.NewVBox(false, 1)
 
 	static_analysis_frame := gtk.NewFrame("Static Analysis")
@@ -251,7 +263,7 @@ func startMongoDB() {
 	if err != nil {
 		fmt.Println(err)
 	}
-	if helper.FolderExists(wd+"/tools/mongodb/bin/mongod", "Install all dependencies before mining!") {
+	if folderExists(wd+"/tools/mongodb/bin/mongod", "Install all dependencies before mining!") {
 		out, err := exec.Command("pgrep", "mongod").Output()
 		if err != nil {
 			fmt.Println("Starting MongoDB..")
@@ -279,27 +291,63 @@ func stopMongoDB() {
 	}
 }
 
-func CreateUIManager() *gtk.UIManager {
-	UI_INFO := `
-<ui>
-  <menubar name='MenuBar'>
-    <menu action='FileMenu'>
-      <menuitem action='FileQuit' />
-    </menu>
-    <menu action='HelpMenu'>
-      <menuitem action='HelpAbout'/>
-    </menu>
-  </menubar>
-</ui>
-`
-	ui_manager := gtk.NewUIManager()
-	ui_manager.AddUIFromString(UI_INFO)
-	return ui_manager
+func displayDialog(msg string) {
+	dialog := gtk.NewMessageDialog(
+		gtk.NewWindow(gtk.WINDOW_TOPLEVEL),
+		gtk.DIALOG_MODAL,
+		gtk.MESSAGE_INFO,
+		gtk.BUTTONS_OK,
+		msg)
+	dialog.Run()
+	dialog.Destroy()
+}
+
+func folderExists(dir string, error_msg string) bool {
+	if _, err := os.Stat(dir); err != nil {
+		if os.IsNotExist(err) {
+			if error_msg != "" {
+				displayDialog(error_msg)
+			}
+			return false
+		} else {
+			// other error
+			fmt.Println(err)
+		}
+	}
+	return true
+}
+
+func setFolder(context string, dir *string) *gtk.HBox {
+	hbox := gtk.NewHBox(false, 5)
+	hbox.SetBorderWidth(5)
+
+	input_box := gtk.NewEntry()
+	input_box.SetText("Select " + context + " Folder..")
+	input_box.SetSizeRequest(420, -1)
+	input_button := gtk.NewButtonWithLabel(context + " Folder")
+	input_button.SetSizeRequest(150, 0)
+	input_button.Connect("clicked", func() {
+		filechooserdialog := gtk.NewFileChooserDialog(
+			"Choose "+context+" Folder...",
+			input_button.GetTopLevelAsWindow(),
+			gtk.FILE_CHOOSER_ACTION_SELECT_FOLDER,
+			gtk.STOCK_OK,
+			gtk.RESPONSE_ACCEPT)
+		filechooserdialog.Response(func() {
+			*dir = filechooserdialog.GetFilename()
+			input_box.SetText(*dir)
+			filechooserdialog.Destroy()
+		})
+		filechooserdialog.Run()
+	})
+	hbox.PackStart(input_button, false, false, 0)
+	hbox.PackStart(input_box, false, false, 0)
+	return hbox
 }
 
 func main() {
 	gtk.Init(nil)
-	window := CreateWindow()
+	window := createWindow()
 	startMongoDB()
 	window.SetPosition(gtk.WIN_POS_CENTER)
 	window.Connect("destroy", func() {
