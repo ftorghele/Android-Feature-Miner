@@ -103,7 +103,7 @@ def main(options, args) :
     if options.input == None or options.output == None :
         print "static_analysis.py -i <inputfile> -o <outputfolder>"
         sys.exit(2)
-    elif collection.find_one({"_id": hashfile(options.input)}) != None :
+    elif collection.find({"_id": hashfile(options.input)}).limit(1).count() == 1 :
         print "\tstatic analysis found.. skipping.."
     else :
         t_beginning = time.time()
