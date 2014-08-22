@@ -9,9 +9,9 @@ import (
 	"os/exec"
 	"runtime"
 	"strconv"
-	"strings"
 )
 
+var working_dir string
 var inputFolder, outputFolder string
 var apks []string
 
@@ -259,31 +259,21 @@ func setupPage() *gtk.VBox {
 }
 
 func startMongoDB() {
-	wd, err := os.Getwd()
-	if err != nil {
-		fmt.Println(err)
-	}
-	if folderExists(wd+"/tools/mongodb/bin/mongod", "Install all dependencies before mining!") {
-		out, err := exec.Command("pgrep", "mongod").Output()
-		if err != nil {
-			fmt.Println("Starting MongoDB..")
-			cmd := exec.Command(wd+"/tools/mongodb/bin/mongod", "--dbpath", wd+"/features")
-			if err := cmd.Start(); err != nil {
-				fmt.Println(err)
-			}
-		} else {
-			fmt.Println("MongoDB already running on PID " + string(out))
+	if folderExists(working_dir+"/tools/mongodb/bin/mongod", "Install all dependencies before mining!") {
+		fmt.Println("Starting MongoDB..")
+		cmd := exec.Command(working_dir+"/tools/mongodb/bin/mongod", "--dbpath", working_dir+"/data", "--noauth", "--port", "6662")
+		cmd.Stderr = os.Stderr
+		if err := cmd.Start(); err != nil {
+			fmt.Println(err)
 		}
 	}
 }
 
 func stopMongoDB() {
-	out, err := exec.Command("pgrep", "mongod").Output()
+	_, err := exec.Command("pgrep", "mongod").Output()
 	if err == nil {
-		pid := strings.TrimSpace(string(out))
-		fmt.Println("Stopping MongoDB running on PID " + pid)
-		cmd := exec.Command("kill", "-SIGTERM", pid)
-		cmd.Stdout = os.Stdout
+		fmt.Println("Stopping MongoDB..")
+		cmd := exec.Command(working_dir+"/tools/mongodb/bin/mongod", "--shutdown", "--dbpath", working_dir+"/data")
 		cmd.Stderr = os.Stderr
 		if err := cmd.Start(); err != nil {
 			fmt.Println(err)
@@ -357,4 +347,12 @@ func main() {
 	})
 	window.ShowAll()
 	gtk.Main()
+}
+
+func init() {
+	wd, err := os.Getwd()
+	if err != nil {
+		fmt.Println(err)
+	}
+	working_dir = wd
 }
