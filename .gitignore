@@ -3,3 +3,4 @@ data/
 tools/
 tmp/
 *.apk
+*.log

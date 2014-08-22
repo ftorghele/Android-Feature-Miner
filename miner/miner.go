@@ -13,7 +13,7 @@ import (
 func LoadAPKs(inputDir string, apks *[]string, button *gtk.Button) {
 	*apks = nil
 	filepath.Walk(inputDir, func(filePath string, _ os.FileInfo, _ error) error {
-		if path.Ext(filePath) == ".apk" {
+		if path.Ext(filePath) == ".apk" || path.Ext(filePath) == ".APK" {
 			*apks = append(*apks, filePath)
 		}
 		return nil

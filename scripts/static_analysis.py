@@ -24,9 +24,10 @@
 # THE SOFTWARE.
 # ----------------------------------------------------------------------------------
 
-import sys, io, os, json, hashlib
+import sys, io, os, json, hashlib, time
 
 from optparse import OptionParser
+from pymongo import MongoClient
 
 sys.path.append("./tools/androguard")
 from androguard.core import androconf
@@ -51,6 +52,11 @@ def native_method_count(vm) :
             ++count
     return count
 
+def replace_all(text, dic):
+    for i, j in dic.iteritems():
+        text = text.replace(i, j)
+    return text
+
 def get_methods(cm, paths, result) :
     for path in paths :
         src_class_name, src_method_name, src_descriptor =  path.get_src( cm )
@@ -60,8 +66,13 @@ def get_methods(cm, paths, result) :
         del callerNamespace[-1]
         callerNamespace = "/".join(callerNamespace)
 
+        callerNamespace = replace_all(callerNamespace, {'$':'_', '.':'_'})
+        dst_class_name  = replace_all(dst_class_name, {'$':'_', '.':'_'})
+        dst_method_name = replace_all(dst_method_name, {'$':'_', '.':'_'})
+        dst_descriptor  = replace_all(dst_descriptor, {'$':'_', '.':'_'})
+
         if callerNamespace not in result:
-            result[callerNamespace] = {}
+            result[str(callerNamespace)] = {}
         if dst_class_name not in result[callerNamespace]:
             result[callerNamespace][dst_class_name] = {}
         if dst_method_name not in result[callerNamespace][dst_class_name]:
@@ -84,12 +95,19 @@ def actual_permissions(vm, vmx) :
 
 def main(options, args) :
     print options.input
+
+    client     = MongoClient('localhost', 6662)
+    db         = client.androsom
+    collection = db.static_features
+
     if options.input == None or options.output == None :
         print "static_analysis.py -i <inputfile> -o <outputfolder>"
         sys.exit(2)
-    elif os.path.isfile(options.output + "/" + hashfile(options.input) + "_static.json") :
+    elif collection.find_one({"_id": hashfile(options.input)}) != None :
         print "\tstatic analysis found.. skipping.."
     else :
+        t_beginning = time.time()
+
         ret_type = androconf.is_android( options.input ) 
 
         if ret_type == "APK" :
@@ -101,6 +119,8 @@ def main(options, args) :
                     vmx = analysis.uVMAnalysis(vm)
 
                     data = {
+                        '_id'                : hashfile(options.input),
+                        'validApk'           : True,
                         'mainActivity'       : a.get_main_activity(),
                         'activities'         : a.get_activities(),
                         'providers'          : a.get_providers(),
@@ -125,11 +145,17 @@ def main(options, args) :
                         'externalMethodCalls' : get_methods(vm.get_class_manager(), vmx.get_tainted_packages().get_external_packages(), {})
                     }
 
-                    with io.open(options.output + "/" + hashfile(options.input) + "_static.json", 'w', encoding='utf-8') as f:
-                        f.write(unicode(json.dumps(data, sort_keys=False, indent=2, separators=(',', ': '), ensure_ascii=False)))
+                    data['duration'] = time.time() - t_beginning
+
+                    collection.insert(data)
 
                 else :
                     print "INVALID APK"
+                    data = {
+                        '_id'      : hashfile(options.input),
+                        'validApk' : False
+                    }
+                    collection.insert(data)
             except Exception, e :
                 print "ERROR", e
                 import traceback
