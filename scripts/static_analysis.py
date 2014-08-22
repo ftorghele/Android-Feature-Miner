@@ -65,9 +65,11 @@ def get_methods(cm, paths, result) :
         if dst_class_name not in result[callerNamespace]:
             result[callerNamespace][dst_class_name] = {}
         if dst_method_name not in result[callerNamespace][dst_class_name]:
-            result[callerNamespace][dst_class_name][dst_method_name] = 1
+            result[callerNamespace][dst_class_name][dst_method_name] = {}
+        if dst_descriptor not in result[callerNamespace][dst_class_name][dst_method_name]:
+            result[callerNamespace][dst_class_name][dst_method_name][dst_descriptor] = 1
         else :
-            result[callerNamespace][dst_class_name][dst_method_name] += 1
+            result[callerNamespace][dst_class_name][dst_method_name][dst_descriptor] += 1
     return result
 
 def actual_permissions(vm, vmx) :
