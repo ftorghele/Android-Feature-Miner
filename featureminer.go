@@ -12,7 +12,7 @@ import (
 )
 
 var working_dir string
-var inputFolder, outputFolder string
+var input_folder, output_folder string
 var apks []string
 
 func createWindow() *gtk.Window {
@@ -85,30 +85,55 @@ func createMenu(w *gtk.Window, vbox *gtk.VBox) {
 func minerPage() *gtk.VBox {
 	vbox := gtk.NewVBox(false, 1)
 
-	framebox := gtk.NewVBox(false, 1)
+	general_analysis_frame := gtk.NewVBox(false, 1)
 
-	framebox.Add(setFolder("Input", &inputFolder))
-	framebox.Add(setFolder("Output", &outputFolder))
+	general_analysis_frame.Add(setFolder("Input", &input_folder))
+	general_analysis_frame.Add(setFolder("Output", &output_folder))
 
 	load_button_hbox := gtk.NewHBox(false, 0)
 	load_button_hbox.SetBorderWidth(5)
 	load_button_hbox.SetSizeRequest(-1, 60)
 	load_button := gtk.NewButtonWithLabel("Load Android APKs")
 	load_button_hbox.PackStart(load_button, true, true, 0)
-	framebox.Add(load_button_hbox)
+	general_analysis_frame.Add(load_button_hbox)
 
 	apk_count_label_hbox := gtk.NewHBox(false, 0)
 	apk_count_label_hbox.SetBorderWidth(5)
 	apk_count_label_hbox.SetSizeRequest(-1, 30)
 	apk_count_label := gtk.NewLabel("Loaded APKs: None.. Please load APKs to continue.")
 	apk_count_label_hbox.PackStart(apk_count_label, true, true, 0)
-	framebox.Add(apk_count_label_hbox)
+	general_analysis_frame.Add(apk_count_label_hbox)
 
-	vbox.PackStart(framebox, false, true, 0)
+	vbox.PackStart(general_analysis_frame, false, true, 0)
+
+	/* Static Analysis */
+
+	static_analysis_frame := gtk.NewFrame("1. Static Analysis")
+	static_analysis_frame.SetBorderWidth(5)
+	static_analysis_frame.SetSensitive(false)
+
+	static_analysis_hbox := gtk.NewHBox(false, 0)
+	static_analysis_hbox.SetBorderWidth(10)
+	static_analysis_hbox.SetSizeRequest(-1, 60)
+
+	static_analysis_progress := gtk.NewProgressBar()
+	static_analysis_start_button := gtk.NewButtonWithLabel("Start Analysis")
+
+	static_analysis_cpu_count := gtk.NewSpinButtonWithRange(1, float64(runtime.NumCPU()), 1)
+	static_analysis_cpu_count_label := gtk.NewLabel("CPUs: ")
+	static_analysis_cpu_count.Spin(gtk.SPIN_USER_DEFINED, float64(runtime.NumCPU()))
+	static_analysis_cpu_count.SetSizeRequest(40, -1)
+
+	static_analysis_hbox.PackStart(static_analysis_start_button, false, true, 5)
+	static_analysis_hbox.PackStart(static_analysis_progress, true, true, 5)
+	static_analysis_hbox.PackStart(static_analysis_cpu_count_label, false, true, 5)
+	static_analysis_hbox.PackStart(static_analysis_cpu_count, false, true, 5)
+	static_analysis_frame.Add(static_analysis_hbox)
+	vbox.PackStart(static_analysis_frame, false, true, 0)
 
 	/* VirusTotal Analysis */
 
-	vt_analysis_frame := gtk.NewFrame("1. VirusTotal")
+	vt_analysis_frame := gtk.NewFrame("2. VirusTotal")
 	vt_analysis_frame.SetBorderWidth(5)
 	vt_analysis_frame.SetSensitive(false)
 
@@ -120,8 +145,15 @@ func minerPage() *gtk.VBox {
 
 	vt_analysis_progress := gtk.NewProgressBar()
 	vt_analysis_start_button := gtk.NewButtonWithLabel("Start Analysis")
+	vt_analysis_cpu_count := gtk.NewSpinButtonWithRange(1, float64(runtime.NumCPU()), 1)
+	vt_analysis_cpu_count_label := gtk.NewLabel("CPUs: ")
+	vt_analysis_cpu_count.Spin(gtk.SPIN_USER_DEFINED, float64(runtime.NumCPU()))
+	vt_analysis_cpu_count.SetSizeRequest(40, -1)
+
 	vt_analysis_hbox1.PackStart(vt_analysis_start_button, false, true, 5)
 	vt_analysis_hbox1.PackStart(vt_analysis_progress, true, true, 5)
+	vt_analysis_hbox1.PackStart(vt_analysis_cpu_count_label, false, true, 5)
+	vt_analysis_hbox1.PackStart(vt_analysis_cpu_count, false, true, 5)
 
 	vt_analysis_hbox2 := gtk.NewHBox(false, 0)
 	vt_analysis_hbox2.SetBorderWidth(10)
@@ -145,32 +177,7 @@ func minerPage() *gtk.VBox {
 	vt_analysis_frame.Add(vt_analysis_vbox)
 	vbox.PackStart(vt_analysis_frame, false, true, 0)
 
-	/* Static Analysis */
-
-	static_analysis_frame := gtk.NewFrame("2. Static Analysis")
-	static_analysis_frame.SetBorderWidth(5)
-	static_analysis_frame.SetSensitive(false)
-
-	static_analysis_hbox := gtk.NewHBox(false, 0)
-	static_analysis_hbox.SetBorderWidth(10)
-	static_analysis_hbox.SetSizeRequest(-1, 60)
-
-	static_analysis_progress := gtk.NewProgressBar()
-	static_analysis_start_button := gtk.NewButtonWithLabel("Start Analysis")
-
-	static_analysis_cpu_count := gtk.NewSpinButtonWithRange(1, float64(runtime.NumCPU()), 1)
-	static_analysis_cpu_count_label := gtk.NewLabel("CPUs: ")
-	static_analysis_cpu_count.Spin(gtk.SPIN_USER_DEFINED, float64(runtime.NumCPU()))
-	static_analysis_cpu_count.SetSizeRequest(40, -1)
-
-	static_analysis_hbox.PackStart(static_analysis_start_button, false, true, 5)
-	static_analysis_hbox.PackStart(static_analysis_progress, true, true, 5)
-	static_analysis_hbox.PackStart(static_analysis_cpu_count_label, false, true, 5)
-	static_analysis_hbox.PackStart(static_analysis_cpu_count, false, true, 5)
-	static_analysis_frame.Add(static_analysis_hbox)
-	vbox.PackStart(static_analysis_frame, false, true, 0)
-
-	/* Dynamic Analyisi */
+	/* Dynamic Analysis */
 
 	dynamic_analysis_frame := gtk.NewFrame("3. Dynamic Analysis")
 	dynamic_analysis_frame.SetBorderWidth(5)
@@ -188,53 +195,67 @@ func minerPage() *gtk.VBox {
 	dynamic_analysis_frame.Add(dynamic_analysis_hbox)
 	vbox.PackStart(dynamic_analysis_frame, false, true, 0)
 
+	/* Helpers */
+
+	disable_gui := func() {
+		general_analysis_frame.SetSensitive(false)
+		static_analysis_frame.SetSensitive(false)
+		dynamic_analysis_frame.SetSensitive(false)
+		vt_analysis_frame.SetSensitive(false)
+	}
+
+	enable_gui := func() {
+		general_analysis_frame.SetSensitive(true)
+		static_analysis_frame.SetSensitive(true)
+		dynamic_analysis_frame.SetSensitive(true)
+		vt_analysis_frame.SetSensitive(true)
+	}
+
 	/* Events */
 
 	load_button.Connect("clicked", func() {
-		if folderExists(inputFolder, "Please provide a valid input directory!") && folderExists(outputFolder, "Please provide a valid output directory!") {
-			miner.LoadAPKs(inputFolder, &apks, load_button)
+		if folderExists(input_folder, "Please provide a valid input directory!") && folderExists(output_folder, "Please provide a valid output directory!") {
+			miner.LoadAPKs(input_folder, &apks, load_button)
 			if len(apks) > 0 {
 				apk_count_label.SetLabel("Loaded APKs: " + strconv.Itoa(len(apks)))
-				static_analysis_frame.SetSensitive(true)
-				dynamic_analysis_frame.SetSensitive(true)
-				vt_analysis_frame.SetSensitive(true)
+				enable_gui()
 			} else {
 				apk_count_label.SetLabel("No APKs found in this input folder..")
-				static_analysis_frame.SetSensitive(false)
-				dynamic_analysis_frame.SetSensitive(false)
-				vt_analysis_frame.SetSensitive(false)
+				disable_gui()
 			}
 		}
 	})
 
 	static_analysis_start_button.Connect("clicked", func() {
 		fmt.Println("starting static analysis..")
-		static_analysis_start_button.SetSensitive(false)
-		miner.Analysis(&apks, outputFolder, static_analysis_progress, "static_analysis.py", static_analysis_cpu_count.GetValueAsInt())
-		static_analysis_start_button.SetSensitive(true)
+		disable_gui()
+		miner.Analysis(&apks, output_folder, static_analysis_progress, "static_analysis.py", static_analysis_cpu_count.GetValueAsInt(), 0)
+		enable_gui()
 	})
 
 	dynamic_analysis_start_button.Connect("clicked", func() {
 		fmt.Println("starting dynamic analysis..")
-		dynamic_analysis_start_button.SetSensitive(false)
-		miner.Analysis(&apks, outputFolder, dynamic_analysis_progress, "dynamic_analysis.py", 1)
-		dynamic_analysis_start_button.SetSensitive(true)
+		disable_gui()
+		miner.Analysis(&apks, output_folder, dynamic_analysis_progress, "dynamic_analysis.py", 1, 0)
+		enable_gui()
 	})
 
 	vt_analysis_start_button.Connect("clicked", func() {
 		api_key := vt_analysis_api_key.GetText()
 		api_type := vt_analysis_api_type.GetActiveText()
-		api_private := false
+		api_request_pause_ms := 25000
+		api_request_cpu_count := 1
 		if api_type == "private API Key" {
-			api_private = true
+			api_request_pause_ms = 0
+			api_request_cpu_count = vt_analysis_cpu_count.GetValueAsInt()
 		}
 		if len(api_key) != 64 {
 			displayDialog("Please enter a valid VirusTotal API Key.")
 		} else {
 			fmt.Println("getting metatada from VirusTotal..")
-			fmt.Println(api_key)
-			fmt.Println(api_type)
-			fmt.Println(api_private)
+			disable_gui()
+			miner.Analysis(&apks, output_folder, vt_analysis_progress, "virus_total.py", api_request_cpu_count, api_request_pause_ms)
+			enable_gui()
 		}
 
 	})

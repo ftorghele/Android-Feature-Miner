@@ -1,5 +1,6 @@
 features/
 data/
+data
 tools/
 tmp/
 *.apk

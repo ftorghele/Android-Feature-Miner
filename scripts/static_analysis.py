@@ -36,14 +36,38 @@ from androguard.core.bytecodes import dvm
 from androguard.core.analysis import analysis
 from androguard.core.analysis import risk
 
-def hashfile(filepath):
-    sha1 = hashlib.sha1()
-    f = open(filepath, 'rb')
-    try:
-        sha1.update(f.read())
-    finally:
-        f.close()
-    return sha1.hexdigest()
+client   = MongoClient('localhost', 6662)
+db       = client.androsom
+filehash = None
+
+def hashfile(filepath) :
+    global filehash
+
+    if filehash != None :
+        return filehash
+
+    collection = db.file_hashes
+    data       = collection.find_one({"path": filepath})
+
+    if data == None :
+        sha1 = hashlib.sha1()
+        f = open(filepath, 'rb')
+        try:
+            sha1.update(f.read())
+        finally:
+            f.close()
+        filehash = sha1.hexdigest()
+
+        data = {
+            'path' : filepath,
+            'hash' : filehash
+        }
+        collection.insert(data)
+    else :
+        filehash = data.get('hash')
+
+    return filehash
+
 
 def native_method_count(vm) :
     count = 0
@@ -96,15 +120,13 @@ def actual_permissions(vm, vmx) :
 def main(options, args) :
     print options.input
 
-    client     = MongoClient('localhost', 6662)
-    db         = client.androsom
     collection = db.static_features
 
     if options.input == None or options.output == None :
         print "static_analysis.py -i <inputfile> -o <outputfolder>"
         sys.exit(2)
     elif collection.find({"_id": hashfile(options.input)}).limit(1).count() == 1 :
-        print "\tstatic analysis found.. skipping.."
+        print "static analysis found.. skipping.."
     else :
         t_beginning = time.time()
 
