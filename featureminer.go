@@ -229,14 +229,14 @@ func minerPage() *gtk.VBox {
 	static_analysis_start_button.Connect("clicked", func() {
 		fmt.Println("starting static analysis..")
 		disable_gui()
-		miner.Analysis(&apks, output_folder, static_analysis_progress, "static_analysis.py", static_analysis_cpu_count.GetValueAsInt(), 0)
+		miner.Analysis(&apks, static_analysis_progress, output_folder, "static_analysis.py", static_analysis_cpu_count.GetValueAsInt())
 		enable_gui()
 	})
 
 	dynamic_analysis_start_button.Connect("clicked", func() {
 		fmt.Println("starting dynamic analysis..")
 		disable_gui()
-		miner.Analysis(&apks, output_folder, dynamic_analysis_progress, "dynamic_analysis.py", 1, 0)
+		miner.Analysis(&apks, dynamic_analysis_progress, output_folder, "dynamic_analysis.py", 1)
 		enable_gui()
 	})
 
@@ -246,7 +246,7 @@ func minerPage() *gtk.VBox {
 		api_request_pause_ms := 25000
 		api_request_cpu_count := 1
 		if api_type == "private API Key" {
-			api_request_pause_ms = 0
+			api_request_pause_ms = 200
 			api_request_cpu_count = vt_analysis_cpu_count.GetValueAsInt()
 		}
 		if len(api_key) != 64 {
@@ -254,10 +254,9 @@ func minerPage() *gtk.VBox {
 		} else {
 			fmt.Println("getting metatada from VirusTotal..")
 			disable_gui()
-			miner.Analysis(&apks, output_folder, vt_analysis_progress, "virus_total.py", api_request_cpu_count, api_request_pause_ms)
+			miner.VirusTotal(&apks, vt_analysis_progress, api_key, api_request_pause_ms, api_request_cpu_count)
 			enable_gui()
 		}
-
 	})
 
 	return vbox

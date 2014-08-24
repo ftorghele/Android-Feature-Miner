@@ -125,63 +125,63 @@ def main(options, args) :
     if options.input == None or options.output == None :
         print "static_analysis.py -i <inputfile> -o <outputfolder>"
         sys.exit(2)
-    elif collection.find({"_id": hashfile(options.input)}).limit(1).count() == 1 :
+    elif collection.find({"_id": hashfile(options.input)}, limit=1).count() == 1 :
         print "static analysis found.. skipping.."
-    else :
-        t_beginning = time.time()
+        sys.exit(0)
 
-        ret_type = androconf.is_android( options.input ) 
+    t_beginning = time.time()
 
-        if ret_type == "APK" :
-            try :
-                a = apk.APK(options.input, zipmodule=2)
-                if a.is_valid_APK() :
+    ret_type = androconf.is_android( options.input ) 
+    if ret_type == "APK" :
+        try :
+            a = apk.APK(options.input, zipmodule=2)
+            if a.is_valid_APK() :
 
-                    vm = dvm.DalvikVMFormat(a.get_dex())
-                    vmx = analysis.uVMAnalysis(vm)
+                vm = dvm.DalvikVMFormat(a.get_dex())
+                vmx = analysis.uVMAnalysis(vm)
 
-                    data = {
-                        '_id'                : hashfile(options.input),
-                        'validApk'           : True,
-                        'mainActivity'       : a.get_main_activity(),
-                        'activities'         : a.get_activities(),
-                        'providers'          : a.get_providers(),
-                        'receivers'          : a.get_receivers(),
-                        'services'           : a.get_services(),
-                        'androidVersion'     : a.get_androidversion_code(),
-                        'maxSdkVersion'      : a.get_max_sdk_version(),
-                        'minSdkVersion'      : a.get_min_sdk_version(),
-                        'targetSdkVersion'   : a.get_target_sdk_version(),
-                        'package'            : a.get_package(),
-                        'libraries'          : a.get_libraries(),
-                        'isCryptoCode'       : analysis.is_crypto_code(vmx),
-                        'isDynamicCode'      : analysis.is_dyn_code(vmx),
-                        'isNativeCode'       : analysis.is_native_code(vmx),
-                        'nativeMethodCount'  : native_method_count(vm),
-                        'isReflectionCode'   : analysis.is_reflection_code(vmx),
-                        'reflectionCount'    : len(vmx.get_tainted_packages().search_methods("Ljava/lang/reflect/Method;", ".", ".")),
-                        'isAsciiObfuscation' : analysis.is_ascii_obfuscation(vm),
-                        'permissions'        : a.get_permissions(),
-                        'actualPermissions'  : actual_permissions(vm, vmx),
-                        'internalMethodCalls' : get_methods(vm.get_class_manager(), vmx.get_tainted_packages().get_internal_packages(), {}),
-                        'externalMethodCalls' : get_methods(vm.get_class_manager(), vmx.get_tainted_packages().get_external_packages(), {})
-                    }
+                data = {
+                    '_id'                : hashfile(options.input),
+                    'validApk'           : True,
+                    'mainActivity'       : a.get_main_activity(),
+                    'activities'         : a.get_activities(),
+                    'providers'          : a.get_providers(),
+                    'receivers'          : a.get_receivers(),
+                    'services'           : a.get_services(),
+                    'androidVersion'     : a.get_androidversion_code(),
+                    'maxSdkVersion'      : a.get_max_sdk_version(),
+                    'minSdkVersion'      : a.get_min_sdk_version(),
+                    'targetSdkVersion'   : a.get_target_sdk_version(),
+                    'package'            : a.get_package(),
+                    'libraries'          : a.get_libraries(),
+                    'isCryptoCode'       : analysis.is_crypto_code(vmx),
+                    'isDynamicCode'      : analysis.is_dyn_code(vmx),
+                    'isNativeCode'       : analysis.is_native_code(vmx),
+                    'nativeMethodCount'  : native_method_count(vm),
+                    'isReflectionCode'   : analysis.is_reflection_code(vmx),
+                    'reflectionCount'    : len(vmx.get_tainted_packages().search_methods("Ljava/lang/reflect/Method;", ".", ".")),
+                    'isAsciiObfuscation' : analysis.is_ascii_obfuscation(vm),
+                    'permissions'        : a.get_permissions(),
+                    'actualPermissions'  : actual_permissions(vm, vmx),
+                    'internalMethodCalls' : get_methods(vm.get_class_manager(), vmx.get_tainted_packages().get_internal_packages(), {}),
+                    'externalMethodCalls' : get_methods(vm.get_class_manager(), vmx.get_tainted_packages().get_external_packages(), {})
+                }
 
-                    data['duration'] = time.time() - t_beginning
+                data['duration'] = time.time() - t_beginning
 
-                    collection.insert(data)
+                collection.insert(data)
 
-                else :
-                    print "INVALID APK"
-                    data = {
-                        '_id'      : hashfile(options.input),
-                        'validApk' : False
-                    }
-                    collection.insert(data)
-            except Exception, e :
-                print "ERROR", e
-                import traceback
-                traceback.print_exc()
+            else :
+                print "INVALID APK"
+                data = {
+                    '_id'      : hashfile(options.input),
+                    'validApk' : False
+                }
+                collection.insert(data)
+        except Exception, e :
+            print "ERROR", e
+            import traceback
+            traceback.print_exc()
 
 if __name__ == "__main__" :
     parser = OptionParser()

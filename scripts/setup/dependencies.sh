@@ -76,6 +76,7 @@ sudo apt-get install --yes \
   python-pip               \
 
 sudo pip install pyftpdlib
+sudo pip install requests
 
 rm -rf $DIR/../tools/pcapfix*
 cd $DIR/../tools

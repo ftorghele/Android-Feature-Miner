@@ -42,52 +42,52 @@ def call(cmd) :
     subprocess.Popen(cmd, stdout=None, stderr=None, shell=True).wait()
 
 def clean_state() :
-    printInfo("Restoring clean state..")
+    print_info("Restoring clean state..")
     call("rm -rf " + current_dir + "/../tmp/*")
     call("VBoxManage snapshot AndroidVM restore cleanstate")
 
 def start_vm() :
-    printInfo("Starting Android VM..")
+    print_info("Starting Android VM..")
     call("VBoxManage startvm AndroidVM")
 
 def stop_vm() :
-    printInfo("Stopping Android VM..")
+    print_info("Stopping Android VM..")
     call("VBoxManage controlvm AndroidVM poweroff")
 
 def connect_adb() :
-    printInfo("Connecting ADB..")
+    print_info("Connecting ADB..")
     call("adb kill-server")
     time.sleep(2.5)
     call("adb connect 127.0.0.1:6666")
     call("adb wait-for-device")
 
 def install_apk(apk_path) :
-    printInfo("Installing APK..")
+    print_info("Installing APK..")
     call("adb install " + apk_path)
 
 def push_tasks() : 
-    printInfo("Uploading tasks to Android..")
+    print_info("Uploading tasks to Android..")
     call("adb push " + current_dir + "/tasks.sh /data/local/tasks.sh")
     call("adb shell chmod 777 /data/local/tasks.sh")
     call("adb shell sh /data/local/tasks.sh prepare")
 
 def start_tcpdump() :
-    printInfo("Starting tcpdump..")
+    print_info("Starting tcpdump..")
     call("adb shell sh /data/local/tasks.sh tcpdump start")
 
 def stop_tcpdump() :
-    printInfo("Stopping tcpdump..")
+    print_info("Stopping tcpdump..")
     call("adb shell sh /data/local/tasks.sh tcpdump stop")
 
 def pull_data() :
-    printInfo("Pulling data..")
+    print_info("Pulling data..")
     call(current_dir + "/ftp.sh start " + current_dir + "/../tmp")
     call("adb shell sh /data/local/tasks.sh transfer")
     call(current_dir + "/ftp.sh stop " + current_dir + "/../tmp")
     call("cd " + current_dir + "/../tmp/ && tar -xzvf features.tar.gz")
 
 def fix_pcap() :
-    printInfo("Fixing pcap file..")
+    print_info("Fixing pcap file..")
     call("cd " + current_dir + "/../tmp && pcapfix --deep-scan " + current_dir + "/../tmp/tcpdump.pcap")
     if os.path.isfile(current_dir + "/../tmp/fixed_tcpdump.pcap") :
         call("mv -f " + current_dir + "/../tmp/fixed_tcpdump.pcap " + current_dir + "/../tmp/tcpdump.pcap")
@@ -110,13 +110,13 @@ def get_accessed_ips() :
             result.append(line)
     return result
 
-def printInfo(msg) :
+def print_info(msg) :
     print "\n-------------------------------------------------------------------------------"
     print "### " + msg
     print "-------------------------------------------------------------------------------\n"
 
 def main(options, args) :
-    printInfo("Analysis of: " + options.input)
+    print_info("Analysis of: " + options.input)
     if options.input == None or options.output == None :
         print "dynamic_analysis.py -i <inputfile> -o <outputfolder>"
         sys.exit(2)
@@ -174,7 +174,7 @@ def main(options, args) :
             f.write(unicode(json.dumps(data, sort_keys=False, indent=2, separators=(',', ': '), ensure_ascii=False)))
     
 
-        printInfo("Analysis finished.")
+        print_info("Analysis finished.")
 
 
 
