@@ -96,7 +96,7 @@ def get_methods(cm, paths, result) :
         dst_descriptor  = replace_all(dst_descriptor, {'$':'_', '.':'_'})
 
         if callerNamespace not in result:
-            result[str(callerNamespace)] = {}
+            result[callerNamespace] = {}
         if dst_class_name not in result[callerNamespace]:
             result[callerNamespace][dst_class_name] = {}
         if dst_method_name not in result[callerNamespace][dst_class_name]:

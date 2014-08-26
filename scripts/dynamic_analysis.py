@@ -25,18 +25,56 @@
 # ----------------------------------------------------------------------------------
 
 import sys, io, os.path, subprocess, json, hashlib, time
-from optparse import OptionParser
 
-current_dir = os.path.dirname(sys.argv[0])
+from optparse import OptionParser
+from pymongo import MongoClient
+
+current_dir       = os.path.dirname(sys.argv[0])
+client            = MongoClient('localhost', 6662)
+db                = client.androsom
+filehash          = None
+apk_package       = ""
+apk_main_activity = ""
+static_analysis   = None
+durations         = {}
+monkey_errors     = {}
+
+valid_analysis    = True
+min_valid_runs    = 2
+
+monkey_steps      = 1250
+monkey_min_time   = 60
+monkey_max_time   = 100
+monkey_trys       = 3
+monkey_runs       = 4
 
 def hashfile(filepath) :
-    sha1 = hashlib.sha1()
-    f = open(filepath, 'rb')
-    try:
-        sha1.update(f.read())
-    finally:
-        f.close()
-    return sha1.hexdigest()
+    global filehash
+
+    if filehash != None :
+        return filehash
+
+    collection = db.file_hashes
+    data       = collection.find_one({"path": filepath})
+
+    if data == None :
+        sha1 = hashlib.sha1()
+        f = open(filepath, 'rb')
+        try:
+            sha1.update(f.read())
+        finally:
+            f.close()
+        filehash = sha1.hexdigest()
+
+        data = {
+            'path' : filepath,
+            'hash' : filehash
+        }
+        collection.insert(data)
+    else :
+        filehash = data.get('hash')
+
+    return filehash
 
 def call(cmd) :
     subprocess.Popen(cmd, stdout=None, stderr=None, shell=True).wait()
@@ -61,9 +99,9 @@ def connect_adb() :
     call("adb connect 127.0.0.1:6666")
     call("adb wait-for-device")
 
-def install_apk(apk_path) :
+def install_apk() :
     print_info("Installing APK..")
-    call("adb install " + apk_path)
+    call("adb install " + options.input)
 
 def push_tasks() : 
     print_info("Uploading tasks to Android..")
@@ -79,12 +117,48 @@ def stop_tcpdump() :
     print_info("Stopping tcpdump..")
     call("adb shell sh /data/local/tasks.sh tcpdump stop")
 
+def monkey() :
+    global durations, monkey_errors, valid_analysis
+
+    valid_count = 0
+
+    for i in xrange(0, monkey_runs) :
+        duration = run_monkey(i)
+
+        if duration < monkey_min_time or duration > monkey_max_time :
+            monkey_errors["monkey_"+str(i)+"_try_0"] = "monkey duration not between min("+ str(monkey_min_time) +"sec) and max("+ str(monkey_max_time) +"sec): " + str(duration) + " sec."
+            print monkey_errors.get("monkey_"+str(i)+"_try_0")
+            for e in xrange(1, monkey_trys) :
+                if duration >= monkey_min_time and duration <= monkey_max_time :
+                    continue
+                else :
+                    duration = run_monkey(i)
+                    if duration < monkey_min_time or duration > monkey_max_time :
+                         monkey_errors["monkey_"+str(i)+"_try_"+str(e)] = "monkey duration not between min("+ str(monkey_min_time) +"sec) and max("+ str(monkey_max_time) +"sec): " + str(duration) + " sec."
+                         print monkey_errors.get("monkey_"+str(i)+"_try_"+str(e))
+
+
+        if duration >= monkey_min_time and duration <= monkey_max_time :
+            durations["monkey_"+str(i)] = duration
+            valid_count += 1
+        else :
+            durations["monkey_"+str(i)] = False
+
+    if valid_count < min_valid_runs :
+        valid_analysis = False
+
+
+def run_monkey(i) :
+    t_begin = time.time()
+    print_info("Run monkey with strace.. run " + str(i+1) + " of " + str(monkey_runs))
+    call("adb shell sh /data/local/tasks.sh monkey " + apk_package + " " + str(monkey_steps) + " _" + str(i))
+    return time.time() - t_begin
+        
 def pull_data() :
     print_info("Pulling data..")
     call(current_dir + "/ftp.sh start " + current_dir + "/../tmp")
     call("adb shell sh /data/local/tasks.sh transfer")
     call(current_dir + "/ftp.sh stop " + current_dir + "/../tmp")
-    call("cd " + current_dir + "/../tmp/ && tar -xzvf features.tar.gz")
 
 def fix_pcap() :
     print_info("Fixing pcap file..")
@@ -110,78 +184,78 @@ def get_accessed_ips() :
             result.append(line)
     return result
 
+def save_data() :
+    call("mv -f " + current_dir + "/../tmp/tcpdump.pcap " + options.output + "/" + hashfile(options.input) + ".pcap")
+    for i in xrange(0, monkey_runs) :
+        call("mv -f " + current_dir + "/../tmp/strace_" + str(i) + ".log " + options.output + "/" + hashfile(options.input) + "_" + str(i) + ".strace")
+
 def print_info(msg) :
     print "\n-------------------------------------------------------------------------------"
     print "### " + msg
     print "-------------------------------------------------------------------------------\n"
 
 def main(options, args) :
+    global apk_main_activity, apk_package, durations
+
     print_info("Analysis of: " + options.input)
     if options.input == None or options.output == None :
         print "dynamic_analysis.py -i <inputfile> -o <outputfolder>"
         sys.exit(2)
+    elif db.dynamic_features.find({"_id": hashfile(options.input)}).count() > 0 :
+        print "dynamic analysis found.. skipping.."
+        sys.exit(0)
+    elif db.virustotal_features.find({"sha1": hashfile(options.input)}).count() == 0 :
+        print "virus total metadata not found.. skipping.."
+        sys.exit(0)
+    elif db.virustotal_features.find({ "$or": [ { "positives": 0 }, { "positives": { "$gte": 35 } } ], "sha1": hashfile(options.input) }).count() == 0 :
+        print "not clear enough benign or malicious.. skipping.."
+        sys.exit(0)
+    elif db.static_features.find({"_id": hashfile(options.input)}).count() == 0 :
+        print "static analysis not found.. skipping.."
+        sys.exit(0)
     else :
-        analysis_file_path = options.output + "/" + hashfile(options.input)
+        static_analysis   = db.static_features.find_one({"_id": hashfile(options.input)})
+        apk_package       = static_analysis.get("package")
+        apk_main_activity = static_analysis.get("mainActivity")  
 
-        apk_package          = ""
-        apk_main_activity    = ""
-        static_analysis_data = []
+    print "package:\t" + apk_package
+    print "main activity:\t" + apk_main_activity
 
-        #if os.path.isfile(analysis_file_path + "_dynamic.json") :
-        #    print "dynamic analysis found.. skipping.."
-        #elif ...
-        if os.path.isfile(analysis_file_path + "_static.json") :
-            fh                   = open(analysis_file_path + "_static.json")
-            static_analysis_data = json.load(fh)
+    t_all_beginning = time.time()
 
-            apk_package          = static_analysis_data.get("package", None)
-            apk_main_activity    = static_analysis_data.get("mainActivity", None)
+    clean_state()
+    start_vm()
+    connect_adb()
+    push_tasks()
+    start_tcpdump()
+    install_apk()
+    monkey()
+    stop_tcpdump()
+    pull_data()
+    stop_vm()
+    fix_pcap()
 
-            fh.close()
-        else :
-            command           = "aapt dump badging " + options.input + " | awk -F\" \" '/package/ {print $2}' | awk -F\"'\" '/name=/ {print $2}'"
-            apk_package       = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=None, shell=True).communicate()[0].rstrip()
-            command           = "aapt dump badging " + options.input + " | awk -F\" \" '/launchable activity/ {print $3}' | awk -F\"'\" '/name=/ {print $2}'"
-            apk_main_activity = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=None, shell=True).communicate()[0].rstrip()
+    durations["all"] = time.time() - t_all_beginning,
 
-        print "package:\t" + apk_package
-        print "main activity:\t" + apk_main_activity
+    data = {
+        '_id'               : hashfile(options.input),
+        'valid_analysis'    : valid_analysis,
+        'durations'         : durations,
+        'monkey_errors'     : monkey_errors,
+        'accessedHostnames' : get_accessed_hostnames(),
+        'accessedIps'       : get_accessed_ips()
+    }
 
-        t_beginning = time.time()
+    db.dynamic_features.insert(data)
 
-        clean_state()
-        start_vm()
-        connect_adb()
-        push_tasks()
-        start_tcpdump()
-        install_apk(options.input)
-        time.sleep(30)
-        stop_tcpdump()
-        pull_data()
-        stop_vm()
+    save_data()
 
-        fix_pcap()
-
-        t_ending = time.time()
-
-        data = {
-            'duration'          : t_ending - t_beginning,
-            'accessedHostnames' : get_accessed_hostnames(),
-            'accessedIps'       : get_accessed_ips()
-        }
-
-        with io.open(options.output + "/" + hashfile(options.input) + "_dynamic.json", 'w', encoding='utf-8') as f:
-            f.write(unicode(json.dumps(data, sort_keys=False, indent=2, separators=(',', ': '), ensure_ascii=False)))
-    
-
-        print_info("Analysis finished.")
-
-
+    print_info("Analysis finished.")
 
 if __name__ == "__main__" :
     parser = OptionParser()
     parser.add_option("-i", "--input", dest="input", help="path to the APK file which shoud be analysed.")
-    parser.add_option("-o", "--output", dest="output", help="folder to write the analysis result as json.")
+    parser.add_option("-o", "--output", dest="output", help="folder to store pulled files.")
     (options, args) = parser.parse_args()
 
     sys.argv[:] = args

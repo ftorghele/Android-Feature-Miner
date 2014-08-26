@@ -112,11 +112,8 @@ def main(options, args) :
     if options.input == None or options.key == None or options.delay == None :
         print "virus_total.py -i <input file path> -k <api key> -d <delay in milliseconds>"
         sys.exit(2)
-    elif db.static_features.find({"_id": hashfile(options.input), 'validApk': False}, limit=1).count() > 0 :
-        print "Not a valid APK.. skipping.. "
-        sys.exit(0)
     elif db.virustotal_features.find({"sha1": hashfile(options.input)}).count() > 0 :
-        print "dynamic analysis found.. skipping.."
+        print "virus total metadata found.. skipping.."
         sys.exit(0)
     else :
         request_report(hashfile(options.input))

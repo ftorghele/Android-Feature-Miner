@@ -246,7 +246,7 @@ func minerPage() *gtk.VBox {
 		api_request_pause_ms := 25000
 		api_request_cpu_count := 1
 		if api_type == "private API Key" {
-			api_request_pause_ms = 200
+			api_request_pause_ms = 100
 			api_request_cpu_count = vt_analysis_cpu_count.GetValueAsInt()
 		}
 		if len(api_key) != 64 {
