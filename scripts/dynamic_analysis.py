@@ -24,7 +24,7 @@
 # THE SOFTWARE.
 # ----------------------------------------------------------------------------------
 
-import sys, io, os.path, subprocess, json, hashlib, time
+import sys, io, os.path, subprocess, json, hashlib, time, re
 
 from optparse import OptionParser
 from pymongo import MongoClient
@@ -38,6 +38,11 @@ apk_main_activity = ""
 static_analysis   = None
 durations         = {}
 monkey_errors     = {}
+
+method_calls      = {}
+accessed_files    = {}
+opened_files      = {}
+chmoded_files     = {}
 
 valid_analysis    = True
 min_valid_runs    = 2
@@ -164,9 +169,10 @@ def fix_pcap() :
     print_info("Fixing pcap file..")
     call("cd " + current_dir + "/../tmp && pcapfix --deep-scan " + current_dir + "/../tmp/tcpdump.pcap")
     if os.path.isfile(current_dir + "/../tmp/fixed_tcpdump.pcap") :
-        call("mv -f " + current_dir + "/../tmp/fixed_tcpdump.pcap " + current_dir + "/../tmp/tcpdump.pcap")
+        call("mv -f " + current_dir + "/../tmp/fixed_tcpdump.pcap " + current_dir + "/../tmp/tcpdump.pcap")    
 
 def get_accessed_hostnames() :
+    print_info("Get accessed hostnames..")
     result = []
     cmd    = "tshark -2 -r  " + current_dir + "/../tmp/tcpdump.pcap -R \"dns.flags.response == 0\" -T fields -e dns.qry.name -e dns.qry"
     output = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=None, shell=True).communicate()
@@ -176,6 +182,7 @@ def get_accessed_hostnames() :
     return result
 
 def get_accessed_ips() :
+    print_info("Get accessed ips..")
     result = []
     cmd    = "tshark -r " + current_dir + "/../tmp/tcpdump.pcap -T fields -e ip.dst ip.src | sort | uniq"
     output = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=None, shell=True).communicate()
@@ -183,6 +190,48 @@ def get_accessed_ips() :
         if line != "" :
             result.append(line)
     return result
+
+def analyse_strace() :
+    global method_calls, accessed_files, opened_files, chmoded_files, durations
+    print_info("Analyse strace logs..")
+
+    t_begin = time.time()
+
+    call("cd " + current_dir + "/../tmp && cat ./strace_*.log >> ./strace_all.log")
+    strace = open( current_dir + "/../tmp/strace_all.log", "r" )
+    for line in strace:
+        line = line.strip()
+
+        method = re.split("\s+|\(", line)
+        if method[1] not in method_calls :
+            method_calls[method[1]] = 1
+        else :
+            method_calls[method[1]] += 1
+
+        if method[1] == "open" or method[1] == "access" or method[1] == "chmod" :
+            path = re.split('open\("|access\("|chmod\("|"', line)
+            path = path[1].replace('.', "_")
+
+            if method[1] == "access" :
+                if path not in accessed_files :
+                    accessed_files[path] = 1
+                else :
+                    accessed_files[path] += 1
+
+            if method[1] == "chmod" :
+                if path not in chmoded_files :
+                    chmoded_files[path] = 1
+                else :
+                    chmoded_files[path] += 1
+
+            if method[1] == "open" :
+                if path not in opened_files :
+                    opened_files[path] = 1
+                else :
+                    opened_files[path] += 1
+
+    strace.close()
+    durations["analyse_strace"] = time.time() - t_begin
 
 def save_data() :
     call("mv -f " + current_dir + "/../tmp/tcpdump.pcap " + options.output + "/" + hashfile(options.input) + ".pcap")
@@ -234,16 +283,21 @@ def main(options, args) :
     pull_data()
     stop_vm()
     fix_pcap()
+    analyse_strace()
 
     durations["all"] = time.time() - t_all_beginning,
 
     data = {
         '_id'               : hashfile(options.input),
-        'valid_analysis'    : valid_analysis,
+        'valid'             : valid_analysis,
         'durations'         : durations,
-        'monkey_errors'     : monkey_errors,
+        'monkeyErrors'      : monkey_errors,
         'accessedHostnames' : get_accessed_hostnames(),
-        'accessedIps'       : get_accessed_ips()
+        'accessedIps'       : get_accessed_ips(),
+        'methodCalls'       : method_calls,
+        'accessedFiles'     : accessed_files,
+        'openedFiles'       : opened_files,
+        'chmodedFiles'      : chmoded_files
     }
 
     db.dynamic_features.insert(data)
