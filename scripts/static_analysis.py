@@ -46,8 +46,8 @@ def hashfile(filepath) :
     if filehash != None :
         return filehash
 
-    collection = db.file_hashes
-    data       = collection.find_one({"path": filepath})
+    db.static_features = db.file_hashes
+    data       = db.static_features.find_one({"path": filepath})
 
     if data == None :
         sha1 = hashlib.sha1()
@@ -62,7 +62,7 @@ def hashfile(filepath) :
             'path' : filepath,
             'hash' : filehash
         }
-        collection.insert(data)
+        db.static_features.insert(data)
     else :
         filehash = data.get('hash')
 
@@ -120,13 +120,17 @@ def actual_permissions(vm, vmx) :
 def main(options, args) :
     print options.input
 
-    collection = db.static_features
-
     if options.input == None or options.output == None :
         print "static_analysis.py -i <inputfile> -o <outputfolder>"
         sys.exit(2)
-    elif collection.find({"_id": hashfile(options.input)}, limit=1).count() == 1 :
+    elif db.static_features.find({"_id": hashfile(options.input)}, limit=1).count() == 1 :
         print "static analysis found.. skipping.."
+        sys.exit(0)
+    elif db.virustotal_features.find({"sha1": hashfile(options.input)}).count() == 0 :
+        print "virus total metadata not found.. skipping.."
+        sys.exit(0)
+    elif db.virustotal_features.find({ "$or": [ { "positives": 0 }, { "positives": { "$gte": 35 } } ], "sha1": hashfile(options.input) }).count() == 0 :
+        print "not clear enough benign or malicious.. skipping.."
         sys.exit(0)
 
     t_beginning = time.time()
@@ -169,7 +173,7 @@ def main(options, args) :
 
                 data['duration'] = time.time() - t_beginning
 
-                collection.insert(data)
+                db.static_features.insert(data)
 
             else :
                 print "INVALID APK"
@@ -177,7 +181,7 @@ def main(options, args) :
                     '_id'      : hashfile(options.input),
                     'validApk' : False
                 }
-                collection.insert(data)
+                db.static_features.insert(data)
         except Exception, e :
             print "ERROR", e
             import traceback

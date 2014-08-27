@@ -86,22 +86,26 @@ function fnMonkey() {
       if pgrep $1 | egrep -q '^[0-9]+$';
       then
         APP_PID=`pgrep $1`
-        kill -SIGSTOP $MONKEY_PID
-        kill -SIGSTOP $APP_PID
+        #kill -SIGSTOP $MONKEY_PID
+        #kill -SIGSTOP $APP_PID
         nohup strace -p$APP_PID -t -tt -f -ff -o"$LOG_DIR/strace$3.log" > "$LOG_DIR/strace$3.out" &
-        kill -SIGCONT $APP_PID
-        kill -SIGCONT $MONKEY_PID
+        #kill -SIGCONT $APP_PID
+        #kill -SIGCONT $MONKEY_PID
         break;
       fi
     done
     echo "Started strace on \"$1\"."
     wait $MONKEY_PID
-    killall strace
+    killall -q strace
+    killall -q $1
 
-    # concatenate logs
+    # concatenate logs if necessary
     cd $LOG_DIR
-    cat ./strace$3.log.* >> ./strace$3.log
-    rm -f ./strace$3.log.*
+    if (ls ./strace$3.log.* >/dev/null)
+    then
+      cat ./strace$3.log.* >> ./strace$3.log
+      rm ./strace$3.log.*
+    fi
   else  
     die "Usage: $0 monkey <process name> <number of steps> <log suffix>"
   fi

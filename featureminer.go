@@ -106,34 +106,9 @@ func minerPage() *gtk.VBox {
 
 	vbox.PackStart(general_analysis_frame, false, true, 0)
 
-	/* Static Analysis */
-
-	static_analysis_frame := gtk.NewFrame("1. Static Analysis")
-	static_analysis_frame.SetBorderWidth(5)
-	static_analysis_frame.SetSensitive(false)
-
-	static_analysis_hbox := gtk.NewHBox(false, 0)
-	static_analysis_hbox.SetBorderWidth(10)
-	static_analysis_hbox.SetSizeRequest(-1, 60)
-
-	static_analysis_progress := gtk.NewProgressBar()
-	static_analysis_start_button := gtk.NewButtonWithLabel("Start Analysis")
-
-	static_analysis_cpu_count := gtk.NewSpinButtonWithRange(1, float64(runtime.NumCPU()), 1)
-	static_analysis_cpu_count_label := gtk.NewLabel("CPUs: ")
-	static_analysis_cpu_count.Spin(gtk.SPIN_USER_DEFINED, float64(runtime.NumCPU()))
-	static_analysis_cpu_count.SetSizeRequest(40, -1)
-
-	static_analysis_hbox.PackStart(static_analysis_start_button, false, true, 5)
-	static_analysis_hbox.PackStart(static_analysis_progress, true, true, 5)
-	static_analysis_hbox.PackStart(static_analysis_cpu_count_label, false, true, 5)
-	static_analysis_hbox.PackStart(static_analysis_cpu_count, false, true, 5)
-	static_analysis_frame.Add(static_analysis_hbox)
-	vbox.PackStart(static_analysis_frame, false, true, 0)
-
 	/* VirusTotal Analysis */
 
-	vt_analysis_frame := gtk.NewFrame("2. VirusTotal")
+	vt_analysis_frame := gtk.NewFrame("1. VirusTotal")
 	vt_analysis_frame.SetBorderWidth(5)
 	vt_analysis_frame.SetSensitive(false)
 
@@ -176,6 +151,31 @@ func minerPage() *gtk.VBox {
 	vt_analysis_vbox.PackStart(gtk.NewLabel("With a public Key only 4 requests/minute are possible."), false, false, 5)
 	vt_analysis_frame.Add(vt_analysis_vbox)
 	vbox.PackStart(vt_analysis_frame, false, true, 0)
+
+	/* Static Analysis */
+
+	static_analysis_frame := gtk.NewFrame("2. Static Analysis")
+	static_analysis_frame.SetBorderWidth(5)
+	static_analysis_frame.SetSensitive(false)
+
+	static_analysis_hbox := gtk.NewHBox(false, 0)
+	static_analysis_hbox.SetBorderWidth(10)
+	static_analysis_hbox.SetSizeRequest(-1, 60)
+
+	static_analysis_progress := gtk.NewProgressBar()
+	static_analysis_start_button := gtk.NewButtonWithLabel("Start Analysis")
+
+	static_analysis_cpu_count := gtk.NewSpinButtonWithRange(1, float64(runtime.NumCPU()), 1)
+	static_analysis_cpu_count_label := gtk.NewLabel("CPUs: ")
+	static_analysis_cpu_count.Spin(gtk.SPIN_USER_DEFINED, float64(runtime.NumCPU()))
+	static_analysis_cpu_count.SetSizeRequest(40, -1)
+
+	static_analysis_hbox.PackStart(static_analysis_start_button, false, true, 5)
+	static_analysis_hbox.PackStart(static_analysis_progress, true, true, 5)
+	static_analysis_hbox.PackStart(static_analysis_cpu_count_label, false, true, 5)
+	static_analysis_hbox.PackStart(static_analysis_cpu_count, false, true, 5)
+	static_analysis_frame.Add(static_analysis_hbox)
+	vbox.PackStart(static_analysis_frame, false, true, 0)
 
 	/* Dynamic Analysis */
 

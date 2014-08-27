@@ -47,11 +47,11 @@ chmoded_files     = {}
 valid_analysis    = True
 min_valid_runs    = 2
 
-monkey_steps      = 1250
-monkey_min_time   = 60
+monkey_steps      = 625  #1250
+monkey_min_time   = 30   #60
 monkey_max_time   = 100
 monkey_trys       = 3
-monkey_runs       = 4
+monkey_runs       = 2    #4
 
 def hashfile(filepath) :
     global filehash
@@ -96,6 +96,7 @@ def start_vm() :
 def stop_vm() :
     print_info("Stopping Android VM..")
     call("VBoxManage controlvm AndroidVM poweroff")
+    call("adb kill-server")
 
 def connect_adb() :
     print_info("Connecting ADB..")
@@ -121,6 +122,12 @@ def start_tcpdump() :
 def stop_tcpdump() :
     print_info("Stopping tcpdump..")
     call("adb shell sh /data/local/tasks.sh tcpdump stop")
+
+def start_logcat() :
+    print_info("Starting logcat..")
+    call("cd " + current_dir + "/../tmp/ && nohup adb logcat -b radio > ./radio.log &")
+    call("cd " + current_dir + "/../tmp/ && nohup adb logcat -b events > ./events.log &")
+    call("cd " + current_dir + "/../tmp/ && nohup adb logcat -b main > ./logcat.log &")
 
 def monkey() :
     global durations, monkey_errors, valid_analysis
@@ -212,6 +219,11 @@ def analyse_strace() :
             path = re.split('open\("|access\("|chmod\("|"', line)
             path = path[1].replace('.', "_")
 
+            path = path.replace("/data/data/" + apk_package.replace('.', "_"), "", 1)
+
+            if re.search('/proc/\d*/task/\d*/stat', path) :
+                path = "/proc/id/task/id/stat"
+
             if method[1] == "access" :
                 if path not in accessed_files :
                     accessed_files[path] = 1
@@ -231,12 +243,11 @@ def analyse_strace() :
                     opened_files[path] += 1
 
     strace.close()
+    call("cd " + current_dir + "/../tmp && rm -f ./strace_all.log")
     durations["analyse_strace"] = time.time() - t_begin
 
 def save_data() :
-    call("mv -f " + current_dir + "/../tmp/tcpdump.pcap " + options.output + "/" + hashfile(options.input) + ".pcap")
-    for i in xrange(0, monkey_runs) :
-        call("mv -f " + current_dir + "/../tmp/strace_" + str(i) + ".log " + options.output + "/" + hashfile(options.input) + "_" + str(i) + ".strace")
+    call("cp -Rf " + current_dir + "/../tmp " + options.output + "/" + hashfile(options.input))
 
 def print_info(msg) :
     print "\n-------------------------------------------------------------------------------"
@@ -275,6 +286,7 @@ def main(options, args) :
     clean_state()
     start_vm()
     connect_adb()
+    start_logcat()
     push_tasks()
     start_tcpdump()
     install_apk()
