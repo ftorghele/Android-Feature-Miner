@@ -73,30 +73,18 @@ function fnTransfer() {
 }
 
 # start the monkey runner with strace
-function fnMonkey() {
+function fnMonkeyZygote() {
   if [ $1 ] && [ $2 ] && [ $3 ]
   then
+    echo "Starting strace on zygote."
+    ZYGOTE_PID=`pgrep zygote`
+    nohup strace -p$ZYGOTE_PID -t -tt -f -ff -s256 -o"$LOG_DIR/strace$3.log" > "$LOG_DIR/strace$3.out" &
+    STRACE_PID=$!
+
     echo "Starting monkey runner with $2 steps."
     nohup monkey --throttle 250 -p $1 -v $2 > "$LOG_DIR/monkey$3.out" &
     MONKEY_PID=$!
-  
-    echo "Waiting to start strace on \"$1\"."
-    while true
-    do 
-      if pgrep $1 | egrep -q '^[0-9]+$';
-      then
-        APP_PID=`pgrep $1`
-        #kill -SIGSTOP $MONKEY_PID
-        #kill -SIGSTOP $APP_PID
-        nohup strace -p$APP_PID -t -tt -f -ff -o"$LOG_DIR/strace$3.log" > "$LOG_DIR/strace$3.out" &
-        #kill -SIGCONT $APP_PID
-        #kill -SIGCONT $MONKEY_PID
-        break;
-      fi
-    done
-    echo "Started strace on \"$1\"."
     wait $MONKEY_PID
-    killall strace
 
     # concatenate logs if necessary
     cd $LOG_DIR
@@ -109,6 +97,48 @@ function fnMonkey() {
     die "Usage: $0 monkey <process name> <number of steps> <log suffix>"
   fi
 }
+function fnMonkey() {
+   if [ $1 ] && [ $2 ] && [ $3 ]
+   then
+     echo "Starting monkey runner with $2 steps."
+     nohup monkey --throttle 250 -p $1 -v $2 > "$LOG_DIR/monkey$3.out" &
+     MONKEY_PID=$!
+   
+     echo "Waiting to start strace on \"$1\"."
+     while true
+     do 
+       if pgrep $1 | egrep -q '^[0-9]+$';
+       then
+         APP_PID=`pgrep $1`
+         nohup strace -p$APP_PID -t -tt -f -ff -s256 -o"$LOG_DIR/strace$3.log" > "$LOG_DIR/strace$3.out" &
+         break;
+       fi
+     done
+     echo "Started strace on \"$1\"."
+     wait $MONKEY_PID
+
+     # concatenate logs if necessary
+     cd $LOG_DIR
+     if (ls ./strace$3.log.* >/dev/null)
+     then
+       cat ./strace$3.log.* >> ./strace$3.log
+       rm ./strace$3.log.*
+     fi
+   else  
+     die "Usage: $0 monkey <process name> <number of steps> <log suffix>"
+   fi
+ }
+
+function fnClearStrace() {
+  if [ $1 ]
+  then
+    echo "Clearing strace logs with suffix $1"
+    cd $LOG_DIR
+    rm -f ./strace$3.*
+  else  
+    die "Usage: $0 clear_strace <log suffix>"
+  fi
+}
 
 # run one of the tasks
 if [ "$1" = "tcpdump" ]
@@ -117,12 +147,18 @@ then
 elif [ "$1" = "monkey" ]
 then
   fnMonkey $2 $3 $4
+elif [ "$1" = "monkey_zygote" ]
+then
+  fnMonkeyZygote $2 $3 $4
 elif [ "$1" = "transfer" ]
 then
   fnTransfer
 elif [ "$1" = "prepare" ]
 then
   fnPrepare
+elif [ "$1" = "clear_strace" ]
+then
+  fnClearStrace $2
 else
-  die "Usage: $0 <prepare|monkey|tcpdump|transfer>"
+  die "Usage: $0 <prepare|monkey|monkey_zygote|tcpdump|transfer|clear_strace>"
 fi

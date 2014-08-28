@@ -38,7 +38,8 @@ static_features   = None
 apk_package       = ""
 apk_main_activity = ""
 durations         = {}
-monkey_errors     = {}
+errors            = {}
+file_state        = {}
 
 method_calls      = {}
 accessed_files    = {}
@@ -46,13 +47,13 @@ opened_files      = {}
 chmoded_files     = {}
 
 valid_analysis    = True
-min_valid_runs    = 2
 
-monkey_steps      = 625  #1250
-monkey_min_time   = 30   #60
+monkey_steps      = 1250
+monkey_min_time   = 60
 monkey_max_time   = 100
-monkey_trys       = 3
-monkey_runs       = 2    #4
+monkey_trys       = 5
+monkey_runs       = 4
+min_valid_runs    = 4
 
 def hashfile(filepath) :
     global filehash
@@ -131,31 +132,35 @@ def start_logcat() :
     call("cd " + current_dir + "/../tmp/ && nohup adb logcat -b main > ./logcat.log &")
 
 def monkey() :
-    global durations, monkey_errors, valid_analysis
+    global durations, errors, valid_analysis
 
     valid_count = 0
 
     for i in xrange(0, monkey_runs) :
-        duration = run_monkey(i)
+        durations["monkey_"+str(i)] = False
+        for e in xrange(0, monkey_trys) :
+            if durations["monkey_"+str(i)] != False :
+                continue
 
-        if duration < monkey_min_time or duration > monkey_max_time :
-            monkey_errors["monkey_"+str(i)+"_try_0"] = "monkey duration not between min("+ str(monkey_min_time) +"sec) and max("+ str(monkey_max_time) +"sec): " + str(duration) + " sec."
-            print monkey_errors.get("monkey_"+str(i)+"_try_0")
-            for e in xrange(1, monkey_trys) :
-                if duration >= monkey_min_time and duration <= monkey_max_time :
-                    continue
-                else :
-                    duration = run_monkey(i)
-                    if duration < monkey_min_time or duration > monkey_max_time :
-                         monkey_errors["monkey_"+str(i)+"_try_"+str(e)] = "monkey duration not between min("+ str(monkey_min_time) +"sec) and max("+ str(monkey_max_time) +"sec): " + str(duration) + " sec."
-                         print monkey_errors.get("monkey_"+str(i)+"_try_"+str(e))
+            if check_if_remote_file_exists("/sdcard/features/strace_" + str(i) + ".log") :
+                call("adb shell sh /data/local/tasks.sh clear_strace _" + str(i))
 
-
-        if duration >= monkey_min_time and duration <= monkey_max_time :
+            duration = run_monkey(i)
             durations["monkey_"+str(i)] = duration
-            valid_count += 1
-        else :
-            durations["monkey_"+str(i)] = False
+
+            if duration < monkey_min_time :
+                errors["monkey_"+str(i)+"_try_"+str(e)] = "monkey duration beneath min("+ str(monkey_min_time) +"sec): " + str(duration) + " sec."
+            elif duration > monkey_max_time :
+                errors["monkey_"+str(i)+"_try_"+str(e)] = "monkey duration above max("+ str(monkey_max_time) +"sec): " + str(duration) + " sec."
+            elif check_if_remote_file_exists("/sdcard/features/strace_" + str(i) + ".log") == False :
+                errors["monkey_"+str(i)+"_try_"+str(e)] = "no strace log found.."
+
+            if errors.get("monkey_"+str(i)+"_try_"+str(e)) :
+                print errors.get("monkey_"+str(i)+"_try_"+str(e))
+                durations["monkey_"+str(i)] = False
+            else :
+                durations["monkey_"+str(i)] = duration
+                valid_count += 1          
 
     if valid_count < min_valid_runs :
         valid_analysis = False
@@ -168,8 +173,17 @@ def run_monkey(i) :
     call("adb shell sh /data/local/tasks.sh monkey " + apk_package + " " + str(monkey_steps) + " _" + str(i))
     t_end = time.time()
     background_thread.join()
+    call("adb shell am force-stop " + apk_package)
+    time.sleep(5)
     return t_end - t_begin
-        
+
+def check_if_remote_file_exists(path) :
+    output = subprocess.Popen("adb shell ls " + path, stdout=subprocess.PIPE, stderr=None, shell=True).communicate()
+    if output[0].strip() == path :
+        return True
+    else :
+        return False
+   
 def pull_data() :
     print_info("Pulling data..")
     call(current_dir + "/ftp.sh start " + current_dir + "/../tmp")
@@ -243,8 +257,22 @@ def send_broadcasts() :
     for receiver_class in broadcasts :
         for broadcast in broadcasts[receiver_class] :
             call("adb shell am broadcast -a " + broadcast + " -n " + apk_package + "/" + receiver_class)
-            #call("adb shell am broadcast -a " + broadcast + " -c android.intent.category.HOME -n " + apk_package + "/" + receiver_class)
 
+def check_data() :
+    global errors, valid_analysis
+    print_info("Checking files..")
+
+    files = ['tcpdump.pcap', 'radio.log', 'events.log', 'logcat.log']
+    for filename in files :
+        if os.path.isfile(current_dir + "/../tmp/" + filename) == False :
+            errors[filename.replace('.', "_")] = "not found"
+            valid_analysis = False
+    for i in xrange(0, monkey_runs) :
+        if os.path.isfile(current_dir + "/../tmp/strace_" + str(i) + ".log") == False :
+            errors["strace_" + str(i) + "_log"] = "not found"
+            valid_analysis = False
+
+            
 def analyse_strace() :
     global method_calls, accessed_files, opened_files, chmoded_files, durations
     print_info("Analyse strace logs..")
@@ -294,6 +322,8 @@ def analyse_strace() :
     durations["analyse_strace"] = time.time() - t_begin
 
 def save_data() :
+    print_info("Saving data..")
+    call("rm -Rf " + options.output + "/" + hashfile(options.input))
     call("cp -Rf " + current_dir + "/../tmp " + options.output + "/" + hashfile(options.input))
 
 def print_info(msg) :
@@ -343,6 +373,7 @@ def main(options, args) :
     stop_tcpdump()
     pull_data()
     stop_vm()
+    check_data()
     fix_pcap()
     analyse_strace()
 
@@ -352,7 +383,7 @@ def main(options, args) :
         '_id'               : hashfile(options.input),
         'valid'             : valid_analysis,
         'durations'         : durations,
-        'monkeyErrors'      : monkey_errors,
+        'monkeyErrors'      : errors,
         'accessedHostnames' : get_accessed_hostnames(),
         'accessedIps'       : get_accessed_ips(),
         'methodCalls'       : method_calls,
