@@ -77,7 +77,7 @@ function fnMonkey() {
   if [ $1 ] && [ $2 ] && [ $3 ]
   then
     echo "Starting monkey runner with $2 steps."
-    nohup monkey --throttle 250 --kill-process-after-error -p $1 -v $2 > "$LOG_DIR/monkey$3.out" &
+    nohup monkey --throttle 250 -p $1 -v $2 > "$LOG_DIR/monkey$3.out" &
     MONKEY_PID=$!
   
     echo "Waiting to start strace on \"$1\"."
@@ -96,8 +96,7 @@ function fnMonkey() {
     done
     echo "Started strace on \"$1\"."
     wait $MONKEY_PID
-    killall -q strace
-    killall -q $1
+    killall strace
 
     # concatenate logs if necessary
     cd $LOG_DIR

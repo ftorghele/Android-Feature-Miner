@@ -24,7 +24,7 @@
 # THE SOFTWARE.
 # ----------------------------------------------------------------------------------
 
-import sys, io, os.path, subprocess, json, hashlib, time, re
+import sys, io, os.path, subprocess, json, hashlib, time, re, threading
 
 from optparse import OptionParser
 from pymongo import MongoClient
@@ -33,9 +33,10 @@ current_dir       = os.path.dirname(sys.argv[0])
 client            = MongoClient('localhost', 6662)
 db                = client.androsom
 filehash          = None
+broadcasts        = {}
+static_features   = None
 apk_package       = ""
 apk_main_activity = ""
-static_analysis   = None
 durations         = {}
 monkey_errors     = {}
 
@@ -162,9 +163,12 @@ def monkey() :
 
 def run_monkey(i) :
     t_begin = time.time()
+    background_thread = run_in_background()
     print_info("Run monkey with strace.. run " + str(i+1) + " of " + str(monkey_runs))
     call("adb shell sh /data/local/tasks.sh monkey " + apk_package + " " + str(monkey_steps) + " _" + str(i))
-    return time.time() - t_begin
+    t_end = time.time()
+    background_thread.join()
+    return t_end - t_begin
         
 def pull_data() :
     print_info("Pulling data..")
@@ -198,6 +202,49 @@ def get_accessed_ips() :
             result.append(line)
     return result
 
+def get_broadcasts() :
+    global broadcasts
+    print_info("Get broadcasts..")
+
+    possible_broadcasts = []
+    fh = open( current_dir + "/broadcast_action_list.txt", "r" )
+    for line in fh:
+        possible_broadcasts.append(line.strip())
+
+    cmd    = "aapt l -a " + options.input 
+    output = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=None, shell=True).communicate()
+
+    receiver_on_next_line = False
+    current_receiver_name = None
+    for line in output[0].split(os.linesep) :
+        if re.search('E: receiver', line) :
+            receiver_on_next_line = True
+            continue
+        raw = re.search('Raw: "([\w.]*)"', line)
+        if raw == None :
+            continue
+        if receiver_on_next_line :
+            receiver_on_next_line = False
+            receiver_name = raw.group(1)
+            if receiver_name not in broadcasts:
+                broadcasts[receiver_name] = []
+                current_receiver_name = receiver_name
+                continue
+        if current_receiver_name != None and raw.group(1) in possible_broadcasts :
+            broadcasts[current_receiver_name].append(raw.group(1))
+
+def run_in_background() :
+    background_thread = threading.Thread(target=send_broadcasts, args=(), kwargs={})
+    background_thread.start()
+    return background_thread
+
+def send_broadcasts() :
+    time.sleep(5)
+    for receiver_class in broadcasts :
+        for broadcast in broadcasts[receiver_class] :
+            call("adb shell am broadcast -a " + broadcast + " -n " + apk_package + "/" + receiver_class)
+            #call("adb shell am broadcast -a " + broadcast + " -c android.intent.category.HOME -n " + apk_package + "/" + receiver_class)
+
 def analyse_strace() :
     global method_calls, accessed_files, opened_files, chmoded_files, durations
     print_info("Analyse strace logs..")
@@ -219,7 +266,7 @@ def analyse_strace() :
             path = re.split('open\("|access\("|chmod\("|"', line)
             path = path[1].replace('.', "_")
 
-            path = path.replace("/data/data/" + apk_package.replace('.', "_"), "", 1)
+            path = path.replace("/data/data/" + apk_package.replace('.', "_") + "/", "", 1)
 
             if re.search('/proc/\d*/task/\d*/stat', path) :
                 path = "/proc/id/task/id/stat"
@@ -255,7 +302,7 @@ def print_info(msg) :
     print "-------------------------------------------------------------------------------\n"
 
 def main(options, args) :
-    global apk_main_activity, apk_package, durations
+    global apk_main_activity, apk_package, durations, static_features
 
     print_info("Analysis of: " + options.input)
     if options.input == None or options.output == None :
@@ -274,21 +321,23 @@ def main(options, args) :
         print "static analysis not found.. skipping.."
         sys.exit(0)
     else :
-        static_analysis   = db.static_features.find_one({"_id": hashfile(options.input)})
-        apk_package       = static_analysis.get("package")
-        apk_main_activity = static_analysis.get("mainActivity")  
+
+        static_features   = db.static_features.find_one({"_id": hashfile(options.input)})
+        apk_package       = static_features.get('package')
+        apk_main_activity = static_features.get('mainActivity')
 
     print "package:\t" + apk_package
     print "main activity:\t" + apk_main_activity
 
     t_all_beginning = time.time()
 
+    get_broadcasts()
     clean_state()
     start_vm()
     connect_adb()
-    start_logcat()
     push_tasks()
     start_tcpdump()
+    start_logcat()
     install_apk()
     monkey()
     stop_tcpdump()
