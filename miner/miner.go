@@ -59,7 +59,7 @@ func Analysis(apks *[]string, progressBar *gtk.ProgressBar, outputFolder string,
 func analysisConsumer(jobsChan chan string, doneChan chan int, outputFolder string, script string) {
 	for {
 		input := <-jobsChan
-		cmd := exec.Command(working_dir+"/scripts/"+script, "-i"+input, "-o"+outputFolder)
+		cmd := exec.Command(working_dir+"/scripts/"+script, "-i", input, "-o", outputFolder)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {

@@ -24,7 +24,7 @@
 # THE SOFTWARE.
 # ----------------------------------------------------------------------------------
 
-import sys, io, os.path, subprocess, json, hashlib, time, re, threading
+import sys, io, os.path, subprocess, json, hashlib, time, re, threading, thread
 
 from optparse import OptionParser
 from pymongo import MongoClient
@@ -47,13 +47,16 @@ opened_files      = {}
 chmoded_files     = {}
 
 valid_analysis    = True
+timed_out         = False
 
 monkey_steps      = 1250
-monkey_min_time   = 60
-monkey_max_time   = 100
+monkey_min_time   = 60  #sec
+monkey_max_time   = 100 #sec
 monkey_trys       = 5
 monkey_runs       = 4
 min_valid_runs    = 4
+
+timeout_after     = 600 #sec
 
 def hashfile(filepath) :
     global filehash
@@ -102,14 +105,14 @@ def stop_vm() :
 
 def connect_adb() :
     print_info("Connecting ADB..")
-    call("adb kill-server")
+    call("killall adb")
     time.sleep(2.5)
     call("adb connect 127.0.0.1:6666")
     call("adb wait-for-device")
 
 def install_apk() :
     print_info("Installing APK..")
-    call("adb install " + options.input)
+    call("adb install '" + options.input + "'")
 
 def push_tasks() : 
     print_info("Uploading tasks to Android..")
@@ -145,7 +148,7 @@ def monkey() :
             if check_if_remote_file_exists("/sdcard/features/strace_" + str(i) + ".log") :
                 call("adb shell sh /data/local/tasks.sh clear_strace _" + str(i))
 
-            duration = run_monkey(i)
+            duration = run_monkey(i, e)
             durations["monkey_"+str(i)] = duration
 
             if duration < monkey_min_time :
@@ -166,15 +169,16 @@ def monkey() :
         valid_analysis = False
 
 
-def run_monkey(i) :
+def run_monkey(run_count, try_count) :
+    thread.start_new_thread(send_broadcasts, (run_count, try_count))
+    
     t_begin = time.time()
-    background_thread = run_in_background()
-    print_info("Run monkey with strace.. run " + str(i+1) + " of " + str(monkey_runs))
-    call("adb shell sh /data/local/tasks.sh monkey " + apk_package + " " + str(monkey_steps) + " _" + str(i))
+    print_info("Run monkey with strace.. run " + str(run_count+1) + " of " + str(monkey_runs))
+    call("adb shell sh /data/local/tasks.sh monkey " + apk_package + " " + str(monkey_steps) + " _" + str(run_count))
     t_end = time.time()
-    background_thread.join()
+
     call("adb shell am force-stop " + apk_package)
-    time.sleep(5)
+    time.sleep(2)
     return t_end - t_begin
 
 def check_if_remote_file_exists(path) :
@@ -192,28 +196,31 @@ def pull_data() :
 
 def fix_pcap() :
     print_info("Fixing pcap file..")
-    call("cd " + current_dir + "/../tmp && pcapfix --deep-scan " + current_dir + "/../tmp/tcpdump.pcap")
-    if os.path.isfile(current_dir + "/../tmp/fixed_tcpdump.pcap") :
-        call("mv -f " + current_dir + "/../tmp/fixed_tcpdump.pcap " + current_dir + "/../tmp/tcpdump.pcap")    
+    if os.path.isfile(current_dir + "/../tmp/tcpdump.pcap") :
+        call("cd " + current_dir + "/../tmp && pcapfix --deep-scan " + current_dir + "/../tmp/tcpdump.pcap")
+        if os.path.isfile(current_dir + "/../tmp/fixed_tcpdump.pcap") :
+            call("mv -f " + current_dir + "/../tmp/fixed_tcpdump.pcap " + current_dir + "/../tmp/tcpdump.pcap")    
 
 def get_accessed_hostnames() :
     print_info("Get accessed hostnames..")
     result = []
-    cmd    = "tshark -2 -r  " + current_dir + "/../tmp/tcpdump.pcap -R \"dns.flags.response == 0\" -T fields -e dns.qry.name -e dns.qry"
-    output = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=None, shell=True).communicate()
-    for line in output[0].split(os.linesep) :
-        if line != "" :
-            result.append(line.strip())
+    if os.path.isfile(current_dir + "/../tmp/tcpdump.pcap") :
+        cmd    = "tshark -2 -r  " + current_dir + "/../tmp/tcpdump.pcap -R \"dns.flags.response == 0\" -T fields -e dns.qry.name -e dns.qry | sort | uniq"
+        output = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=None, shell=True).communicate()
+        for line in output[0].split(os.linesep) :
+            if line != "" :
+                result.append(line.strip())
     return result
 
 def get_accessed_ips() :
     print_info("Get accessed ips..")
     result = []
-    cmd    = "tshark -r " + current_dir + "/../tmp/tcpdump.pcap -T fields -e ip.dst ip.src | sort | uniq"
-    output = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=None, shell=True).communicate()
-    for line in output[0].split(os.linesep) :
-        if line != "" :
-            result.append(line)
+    if os.path.isfile(current_dir + "/../tmp/tcpdump.pcap") :
+        cmd    = "tshark -r " + current_dir + "/../tmp/tcpdump.pcap -T fields -e ip.dst ip.src | sort | uniq"
+        output = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=None, shell=True).communicate()
+        for line in output[0].split(os.linesep) :
+            if line != "" :
+                result.append(line)
     return result
 
 def get_broadcasts() :
@@ -225,7 +232,7 @@ def get_broadcasts() :
     for line in fh:
         possible_broadcasts.append(line.strip())
 
-    cmd    = "aapt l -a " + options.input 
+    cmd    = "aapt l -a '" + options.input + "'"
     output = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=None, shell=True).communicate()
 
     receiver_on_next_line = False
@@ -247,16 +254,14 @@ def get_broadcasts() :
         if current_receiver_name != None and raw.group(1) in possible_broadcasts :
             broadcasts[current_receiver_name].append(raw.group(1))
 
-def run_in_background() :
-    background_thread = threading.Thread(target=send_broadcasts, args=(), kwargs={})
-    background_thread.start()
-    return background_thread
-
-def send_broadcasts() :
+def send_broadcasts(run_count, try_count) :
     time.sleep(5)
     for receiver_class in broadcasts :
         for broadcast in broadcasts[receiver_class] :
-            call("adb shell am broadcast -a " + broadcast + " -n " + apk_package + "/" + receiver_class)
+            if (errors.get("monkey_"+str(run_count)+"_try_"+str(try_count)) == None) and (durations.get("monkey_"+str(run_count+1)) == None) :
+                call("adb shell am broadcast -a " + broadcast + " -n " + apk_package + "/" + receiver_class)
+            else :
+                thread.exit()
 
 def check_data() :
     global errors, valid_analysis
@@ -280,51 +285,83 @@ def analyse_strace() :
     t_begin = time.time()
 
     call("cd " + current_dir + "/../tmp && cat ./strace_*.log >> ./strace_all.log")
-    strace = open( current_dir + "/../tmp/strace_all.log", "r" )
-    for line in strace:
-        line = line.strip()
+    if os.path.isfile(current_dir + "/../tmp/strace_all.log") :
+        strace = open( current_dir + "/../tmp/strace_all.log", "r" )
+        for line in strace:
+            line = line.strip()
 
-        method = re.split("\s+|\(", line)
-        if method[1] not in method_calls :
-            method_calls[method[1]] = 1
-        else :
-            method_calls[method[1]] += 1
+            method = re.split("\s+|\(", line)
+            if method[1] not in method_calls :
+                method_calls[method[1]] = 1
+            else :
+                method_calls[method[1]] += 1
 
-        if method[1] == "open" or method[1] == "access" or method[1] == "chmod" :
-            path = re.split('open\("|access\("|chmod\("|"', line)
-            path = path[1].replace('.', "_")
+            if method[1] == "open" or method[1] == "access" or method[1] == "chmod" :
+                path = re.split('open\("|access\("|chmod\("|"', line)
+                path = path[1].replace('.', "_")
 
-            path = path.replace("/data/data/" + apk_package.replace('.', "_") + "/", "", 1)
+                path = path.replace("/data/data/" + apk_package.replace('.', "_") + "/", "", 1)
 
-            if re.search('/proc/\d*/task/\d*/stat', path) :
-                path = "/proc/id/task/id/stat"
+                if re.search('/proc/\d*/task/\d*/stat', path) :
+                    path = "/proc/id/task/id/stat"
 
-            if method[1] == "access" :
-                if path not in accessed_files :
-                    accessed_files[path] = 1
-                else :
-                    accessed_files[path] += 1
+                if method[1] == "access" :
+                    if path not in accessed_files :
+                        accessed_files[path] = 1
+                    else :
+                        accessed_files[path] += 1
 
-            if method[1] == "chmod" :
-                if path not in chmoded_files :
-                    chmoded_files[path] = 1
-                else :
-                    chmoded_files[path] += 1
+                if method[1] == "chmod" :
+                    if path not in chmoded_files :
+                        chmoded_files[path] = 1
+                    else :
+                        chmoded_files[path] += 1
 
-            if method[1] == "open" :
-                if path not in opened_files :
-                    opened_files[path] = 1
-                else :
-                    opened_files[path] += 1
+                if method[1] == "open" :
+                    if path not in opened_files :
+                        opened_files[path] = 1
+                    else :
+                        opened_files[path] += 1
 
-    strace.close()
-    call("cd " + current_dir + "/../tmp && rm -f ./strace_all.log")
+        strace.close()
+        call("cd " + current_dir + "/../tmp && rm -f ./strace_all.log")
+
     durations["analyse_strace"] = time.time() - t_begin
 
 def save_data() :
     print_info("Saving data..")
     call("rm -Rf " + options.output + "/" + hashfile(options.input))
     call("cp -Rf " + current_dir + "/../tmp " + options.output + "/" + hashfile(options.input))
+
+    data = {
+        '_id'               : hashfile(options.input),
+        'valid'             : valid_analysis,
+        'timeout'           : timed_out,
+        'durations'         : durations,
+        'errors'            : errors,
+        'accessedHostnames' : get_accessed_hostnames(),
+        'accessedIps'       : get_accessed_ips(),
+        'methodCalls'       : method_calls,
+        'accessedFiles'     : accessed_files,
+        'openedFiles'       : opened_files,
+        'chmodedFiles'      : chmoded_files
+    }
+
+    db.dynamic_features.insert(data)
+
+def timeout(t_all_begin) :
+    global durations, timed_out
+    time.sleep(timeout_after)
+
+    call("killall adb")
+    stop_vm()
+    check_data()
+
+    durations["all"] = time.time() - t_all_begin
+    timed_out = True
+
+    save_data()
+    thread.interrupt_main()
 
 def print_info(msg) :
     print "\n-------------------------------------------------------------------------------"
@@ -351,15 +388,20 @@ def main(options, args) :
         print "static analysis not found.. skipping.."
         sys.exit(0)
     else :
-
         static_features   = db.static_features.find_one({"_id": hashfile(options.input)})
         apk_package       = static_features.get('package')
         apk_main_activity = static_features.get('mainActivity')
 
+    if apk_main_activity == None or apk_package == None :
+        print "Package or main activity not found.. skipping.."
+        sys.exit(0)
+
     print "package:\t" + apk_package
     print "main activity:\t" + apk_main_activity
 
-    t_all_beginning = time.time()
+    t_all_begin = time.time()
+
+    thread.start_new_thread(timeout, (t_all_begin, ))
 
     get_broadcasts()
     clean_state()
@@ -377,22 +419,7 @@ def main(options, args) :
     fix_pcap()
     analyse_strace()
 
-    durations["all"] = time.time() - t_all_beginning,
-
-    data = {
-        '_id'               : hashfile(options.input),
-        'valid'             : valid_analysis,
-        'durations'         : durations,
-        'monkeyErrors'      : errors,
-        'accessedHostnames' : get_accessed_hostnames(),
-        'accessedIps'       : get_accessed_ips(),
-        'methodCalls'       : method_calls,
-        'accessedFiles'     : accessed_files,
-        'openedFiles'       : opened_files,
-        'chmodedFiles'      : chmoded_files
-    }
-
-    db.dynamic_features.insert(data)
+    durations["all"] = time.time() - t_all_begin
 
     save_data()
 
@@ -405,4 +432,8 @@ if __name__ == "__main__" :
     (options, args) = parser.parse_args()
 
     sys.argv[:] = args
-    main(options, args)
+    try:
+        main(options, args)
+    except KeyboardInterrupt:
+        print_info("Timeout..")
+    

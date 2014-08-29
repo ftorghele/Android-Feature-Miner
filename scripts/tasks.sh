@@ -82,7 +82,7 @@ function fnMonkeyZygote() {
     STRACE_PID=$!
 
     echo "Starting monkey runner with $2 steps."
-    nohup monkey --throttle 250 -p $1 -v $2 > "$LOG_DIR/monkey$3.out" &
+    nohup monkey --throttle 250 --kill-process-after-error -p $1 -v $2 > "$LOG_DIR/monkey$3.out" &
     MONKEY_PID=$!
     wait $MONKEY_PID
 
@@ -101,7 +101,7 @@ function fnMonkey() {
    if [ $1 ] && [ $2 ] && [ $3 ]
    then
      echo "Starting monkey runner with $2 steps."
-     nohup monkey --throttle 250 -p $1 -v $2 > "$LOG_DIR/monkey$3.out" &
+     nohup monkey --throttle 250 --kill-process-after-error -p $1 -v $2 > "$LOG_DIR/monkey$3.out" &
      MONKEY_PID=$!
    
      echo "Waiting to start strace on \"$1\"."
