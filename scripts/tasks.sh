@@ -78,20 +78,20 @@ function fnMonkeyZygote() {
   then
     echo "Starting strace on zygote."
     ZYGOTE_PID=`pgrep zygote`
-    nohup strace -p$ZYGOTE_PID -t -tt -f -ff -s256 -o"$LOG_DIR/strace$3.log" > "$LOG_DIR/strace$3.out" &
+    nohup strace -p$ZYGOTE_PID -t -tt -f -ff -s256 -o"$LOG_DIR/strace_$3.log" > "$LOG_DIR/strace_$3.out" &
     STRACE_PID=$!
 
     echo "Starting monkey runner with $2 steps."
-    nohup monkey --throttle 250 --kill-process-after-error -p $1 -v $2 > "$LOG_DIR/monkey$3.out" &
+    nohup monkey --throttle 250 --kill-process-after-error -p $1 -v $2 -s $3 > "$LOG_DIR/monkey_$3.out" &
     MONKEY_PID=$!
     wait $MONKEY_PID
 
     # concatenate logs if necessary
     cd $LOG_DIR
-    if (ls ./strace$3.log.* >/dev/null)
+    if (ls ./strace_$3.log.* >/dev/null)
     then
-      cat ./strace$3.log.* >> ./strace$3.log
-      rm ./strace$3.log.*
+      cat ./strace_$3.log.* >> ./strace_$3.log
+      rm ./strace_$3.log.*
     fi
   else  
     die "Usage: $0 monkey <process name> <number of steps> <log suffix>"
@@ -101,7 +101,7 @@ function fnMonkey() {
    if [ $1 ] && [ $2 ] && [ $3 ]
    then
      echo "Starting monkey runner with $2 steps."
-     nohup monkey --throttle 250 --kill-process-after-error -p $1 -v $2 > "$LOG_DIR/monkey$3.out" &
+     nohup monkey --throttle 250 --kill-process-after-error -p $1 -v $2 -s $3 > "$LOG_DIR/monkey_$3.out" &
      MONKEY_PID=$!
    
      echo "Waiting to start strace on \"$1\"."
@@ -110,7 +110,7 @@ function fnMonkey() {
        if pgrep $1 | egrep -q '^[0-9]+$';
        then
          APP_PID=`pgrep $1`
-         nohup strace -p$APP_PID -t -tt -f -ff -s256 -o"$LOG_DIR/strace$3.log" > "$LOG_DIR/strace$3.out" &
+         nohup strace -p$APP_PID -t -tt -f -ff -s256 -o"$LOG_DIR/strace_$3.log" > "$LOG_DIR/strace_$3.out" &
          break;
        fi
      done
@@ -119,10 +119,10 @@ function fnMonkey() {
 
      # concatenate logs if necessary
      cd $LOG_DIR
-     if (ls ./strace$3.log.* >/dev/null)
+     if (ls ./strace_$3.log.* >/dev/null)
      then
-       cat ./strace$3.log.* >> ./strace$3.log
-       rm ./strace$3.log.*
+       cat ./strace_$3.log.* >> ./strace_$3.log
+       rm ./strace_$3.log.*
      fi
    else  
      die "Usage: $0 monkey <process name> <number of steps> <log suffix>"
@@ -134,7 +134,7 @@ function fnClearStrace() {
   then
     echo "Clearing strace logs with suffix $1"
     cd $LOG_DIR
-    rm -f ./strace$3.*
+    rm -f ./strace_$3.*
   else  
     die "Usage: $0 clear_strace <log suffix>"
   fi

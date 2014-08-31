@@ -171,10 +171,11 @@ def monkey() :
 
 def run_monkey(run_count, try_count) :
     thread.start_new_thread(send_broadcasts, (run_count, try_count))
+    #thread.start_new_thread(send_activities, (run_count, try_count))
     
     t_begin = time.time()
-    print_info("Run monkey with strace.. run " + str(run_count+1) + " of " + str(monkey_runs))
-    call("adb shell sh /data/local/tasks.sh monkey " + apk_package + " " + str(monkey_steps) + " _" + str(run_count))
+    print_info("Run monkey with strace.. run " + str(run_count+1) + " of " + str(monkey_runs) + " try " + str(try_count))
+    call("adb shell sh /data/local/tasks.sh monkey " + apk_package + " " + str(monkey_steps) + " " + str(run_count))
     t_end = time.time()
 
     call("adb shell am force-stop " + apk_package)
@@ -262,6 +263,15 @@ def send_broadcasts(run_count, try_count) :
                 call("adb shell am broadcast -a " + broadcast + " -n " + apk_package + "/" + receiver_class)
             else :
                 thread.exit()
+
+def send_activities(run_count, try_count) :
+    time.sleep(5)
+    for activity in static_features.get('activities') :
+        time.sleep(3)
+        if (errors.get("monkey_"+str(run_count)+"_try_"+str(try_count)) == None) and (durations.get("monkey_"+str(run_count+1)) == None) :
+            call("adb shell am start -n " + apk_package + "/" + activity)
+        else :
+            thread.exit()
 
 def check_data() :
     global errors, valid_analysis
