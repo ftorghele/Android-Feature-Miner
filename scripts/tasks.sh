@@ -50,6 +50,22 @@ function fnPrepare() {
   fi
 }
 
+# log PIDs by user
+function fnLogpids() {
+  if [ $1 ] 
+  then
+    echo "Starting loggin of PIDs for user \"$1\"."
+    while true
+    do
+      cd $LOG_DIR 
+      ps | grep $1 | awk '{ print $2 }' >> "$LOG_DIR/pids.log"
+      sleep 0.2
+    done
+  else  
+    die "Usage: $0 logpids <username>"
+  fi
+}
+
 # tcpdump related tasks
 function fnTcpdump() {
   if [ "$1" = "start" ]
@@ -67,76 +83,50 @@ function fnTcpdump() {
   fi
 }
 
-# compress data for faster transfer
+# strace related tasks
+function fnStrace() {
+  if [ "$1" = "start" ]
+  then
+    ZYGOTE_PID=`pgrep zygote`
+    nohup strace -p$ZYGOTE_PID -t -tt -f -ff -s256 -o"$LOG_DIR/strace_all.log" > "$LOG_DIR/strace.out" &
+    echo "Starting strace on zygote."
+  elif [ "$1" = "stop" ]
+  then
+    STRACE_PID=`pgrep strace`
+    kill -INT $STRACE_PID
+    wait $STRACE_PID
+    killall strace
+    echo "Stopped strace"
+
+    cd $LOG_DIR
+    # rename interesting logs
+    for pid in `cat "$LOG_DIR/pids.log" | sort | uniq`
+    do
+      mv ./strace_all.log.$pid ./strace.log.$pid 
+    done
+    # delete uninterseting logs
+    rm -f ./strace_all*
+    
+  else
+    die "Usage: $0 strace <start|stop>"
+  fi
+}
+
+# transfer all files found in log dir
 function fnTransfer() {
   cd $LOG_DIR && ls | tr '\r' ' ' | xargs -n1 ftpput -v -P 6661 10.0.2.2
 }
 
 # start the monkey runner with strace
-function fnMonkeyZygote() {
+function fnMonkey() {
   if [ $1 ] && [ $2 ] && [ $3 ]
   then
-    echo "Starting strace on zygote."
-    ZYGOTE_PID=`pgrep zygote`
-    nohup strace -p$ZYGOTE_PID -t -tt -f -ff -s256 -o"$LOG_DIR/strace_$3.log" > "$LOG_DIR/strace_$3.out" &
-    STRACE_PID=$!
-
     echo "Starting monkey runner with $2 steps."
-    nohup monkey --throttle 250 --kill-process-after-error -p $1 -v $2 -s $3 > "$LOG_DIR/monkey_$3.out" &
+    nohup monkey --throttle 250 --kill-process-after-error -p $1 -v $2 -s $3 >> "$LOG_DIR/monkey.out" &
     MONKEY_PID=$!
     wait $MONKEY_PID
-
-    # concatenate logs if necessary
-    cd $LOG_DIR
-    if (ls ./strace_$3.log.* >/dev/null)
-    then
-      cat ./strace_$3.log.* >> ./strace_$3.log
-      rm ./strace_$3.log.*
-    fi
   else  
-    die "Usage: $0 monkey <process name> <number of steps> <log suffix>"
-  fi
-}
-function fnMonkey() {
-   if [ $1 ] && [ $2 ] && [ $3 ]
-   then
-     echo "Starting monkey runner with $2 steps."
-     nohup monkey --throttle 250 --kill-process-after-error -p $1 -v $2 -s $3 > "$LOG_DIR/monkey_$3.out" &
-     MONKEY_PID=$!
-   
-     echo "Waiting to start strace on \"$1\"."
-     while true
-     do 
-       if pgrep $1 | egrep -q '^[0-9]+$';
-       then
-         APP_PID=`pgrep $1`
-         nohup strace -p$APP_PID -t -tt -f -ff -s256 -o"$LOG_DIR/strace_$3.log" > "$LOG_DIR/strace_$3.out" &
-         break;
-       fi
-     done
-     echo "Started strace on \"$1\"."
-     wait $MONKEY_PID
-
-     # concatenate logs if necessary
-     cd $LOG_DIR
-     if (ls ./strace_$3.log.* >/dev/null)
-     then
-       cat ./strace_$3.log.* >> ./strace_$3.log
-       rm ./strace_$3.log.*
-     fi
-   else  
-     die "Usage: $0 monkey <process name> <number of steps> <log suffix>"
-   fi
- }
-
-function fnClearStrace() {
-  if [ $1 ]
-  then
-    echo "Clearing strace logs with suffix $1"
-    cd $LOG_DIR
-    rm -f ./strace_$3.*
-  else  
-    die "Usage: $0 clear_strace <log suffix>"
+    die "Usage: $0 monkey <process name> <number of steps> <seed>"
   fi
 }
 
@@ -144,21 +134,21 @@ function fnClearStrace() {
 if [ "$1" = "tcpdump" ]
 then
   fnTcpdump $2
+elif [ "$1" = "strace" ]
+then
+  fnStrace $2
+elif [ "$1" = "logpids" ]
+then
+  fnLogpids $2
 elif [ "$1" = "monkey" ]
 then
   fnMonkey $2 $3 $4
-elif [ "$1" = "monkey_zygote" ]
-then
-  fnMonkeyZygote $2 $3 $4
 elif [ "$1" = "transfer" ]
 then
   fnTransfer
 elif [ "$1" = "prepare" ]
 then
   fnPrepare
-elif [ "$1" = "clear_strace" ]
-then
-  fnClearStrace $2
 else
-  die "Usage: $0 <prepare|monkey|monkey_zygote|tcpdump|transfer|clear_strace>"
+  die "Usage: $0 <prepare|monkey|strace|logpids|tcpdump|transfer>"
 fi

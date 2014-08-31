@@ -37,9 +37,9 @@ broadcasts        = {}
 static_features   = None
 apk_package       = ""
 apk_main_activity = ""
+username          = None
 durations         = {}
 errors            = {}
-file_state        = {}
 
 method_calls      = {}
 accessed_files    = {}
@@ -49,14 +49,11 @@ chmoded_files     = {}
 valid_analysis    = True
 timed_out         = False
 
-monkey_steps      = 1250
-monkey_min_time   = 60  #sec
-monkey_max_time   = 100 #sec
-monkey_trys       = 5
-monkey_runs       = 4
-min_valid_runs    = 4
+monkey_steps      = 1000
+monkey_min_time   = 300  #sec
+monkey_runs       = 0
 
-timeout_after     = 600 #sec
+timeout_after     = monkey_min_time + 300 #sec
 
 def hashfile(filepath) :
     global filehash
@@ -106,7 +103,7 @@ def stop_vm() :
 def connect_adb() :
     print_info("Connecting ADB..")
     call("killall adb")
-    time.sleep(2.5)
+    time.sleep(2)
     call("adb connect 127.0.0.1:6666")
     call("adb wait-for-device")
 
@@ -128,59 +125,40 @@ def stop_tcpdump() :
     print_info("Stopping tcpdump..")
     call("adb shell sh /data/local/tasks.sh tcpdump stop")
 
+def start_strace() :
+    print_info("Starting strace..")
+    call("adb shell sh /data/local/tasks.sh strace start")
+
+    subprocess.Popen(
+        "adb shell sh /data/local/tasks.sh logpids " + username,
+        stdout=None,
+        stderr=None,
+        shell=True
+    )
+
+def stop_strace() :
+    print_info("Stopping strace..")
+    call("adb shell sh /data/local/tasks.sh strace stop")
+
 def start_logcat() :
     print_info("Starting logcat..")
     call("cd " + current_dir + "/../tmp/ && nohup adb logcat -b radio > ./radio.log &")
     call("cd " + current_dir + "/../tmp/ && nohup adb logcat -b events > ./events.log &")
     call("cd " + current_dir + "/../tmp/ && nohup adb logcat -b main > ./logcat.log &")
 
-def monkey() :
-    global durations, errors, valid_analysis
+def get_username() :
+    global username
+    print_info("Getting username..")
 
-    valid_count = 0
-
-    for i in xrange(0, monkey_runs) :
-        durations["monkey_"+str(i)] = False
-        for e in xrange(0, monkey_trys) :
-            if durations["monkey_"+str(i)] != False :
-                continue
-
-            if check_if_remote_file_exists("/sdcard/features/strace_" + str(i) + ".log") :
-                call("adb shell sh /data/local/tasks.sh clear_strace _" + str(i))
-
-            duration = run_monkey(i, e)
-            durations["monkey_"+str(i)] = duration
-
-            if duration < monkey_min_time :
-                errors["monkey_"+str(i)+"_try_"+str(e)] = "monkey duration beneath min("+ str(monkey_min_time) +"sec): " + str(duration) + " sec."
-            elif duration > monkey_max_time :
-                errors["monkey_"+str(i)+"_try_"+str(e)] = "monkey duration above max("+ str(monkey_max_time) +"sec): " + str(duration) + " sec."
-            elif check_if_remote_file_exists("/sdcard/features/strace_" + str(i) + ".log") == False :
-                errors["monkey_"+str(i)+"_try_"+str(e)] = "no strace log found.."
-
-            if errors.get("monkey_"+str(i)+"_try_"+str(e)) :
-                print errors.get("monkey_"+str(i)+"_try_"+str(e))
-                durations["monkey_"+str(i)] = False
-            else :
-                durations["monkey_"+str(i)] = duration
-                valid_count += 1          
-
-    if valid_count < min_valid_runs :
-        valid_analysis = False
-
-
-def run_monkey(run_count, try_count) :
-    thread.start_new_thread(send_broadcasts, (run_count, try_count))
-    #thread.start_new_thread(send_activities, (run_count, try_count))
-    
-    t_begin = time.time()
-    print_info("Run monkey with strace.. run " + str(run_count+1) + " of " + str(monkey_runs) + " try " + str(try_count))
-    call("adb shell sh /data/local/tasks.sh monkey " + apk_package + " " + str(monkey_steps) + " " + str(run_count))
-    t_end = time.time()
-
-    call("adb shell am force-stop " + apk_package)
-    time.sleep(2)
-    return t_end - t_begin
+    call("cd " + current_dir + "/../tmp/ && adb pull /data/system/packages.list")
+    fh = open( current_dir + "/../tmp/packages.list", "r" )
+    for line in fh:
+        result = re.search(apk_package + " (\d*) ", line)
+        if result != None :
+            username  = result.group(1).replace("100", "u0_a", 1)
+            
+    print username
+    call("rm -f " + current_dir + "/../tmp/packages.list")
 
 def check_if_remote_file_exists(path) :
     output = subprocess.Popen("adb shell ls " + path, stdout=subprocess.PIPE, stderr=None, shell=True).communicate()
@@ -188,6 +166,38 @@ def check_if_remote_file_exists(path) :
         return True
     else :
         return False
+
+def monkey(t_automation_begin) :
+    global durations, errors, valid_analysis, monkey_runs
+
+    duration = time.time() - t_automation_begin
+
+    print "already run " + str(duration) + " seconds.."
+
+    step_count = monkey_steps
+
+    t_monkey_begin = time.time()
+    while duration < monkey_min_time :
+        if duration > (monkey_min_time / 2) and step_count > int(monkey_steps / 2):
+            step_count = int(step_count / 2)
+
+        duration += run_monkey(step_count)
+        monkey_runs += 1
+
+        print "already run " + str(duration) + " seconds.."
+
+        if monkey_runs > 10 :
+            valid_analysis = False
+            errors['monkey'] = "More than 10 runs to finish monkey."
+            break
+
+    durations['monkey'] = time.time() - t_monkey_begin
+
+def run_monkey(step_count) :   
+    t_begin = time.time()
+    print_info("Run monkey with strace.. run " + str(monkey_runs + 1))
+    call("adb shell sh /data/local/tasks.sh monkey " + apk_package + " " + str(step_count) + " " + str(monkey_runs))
+    return time.time() - t_begin
    
 def pull_data() :
     print_info("Pulling data..")
@@ -255,36 +265,28 @@ def get_broadcasts() :
         if current_receiver_name != None and raw.group(1) in possible_broadcasts :
             broadcasts[current_receiver_name].append(raw.group(1))
 
-def send_broadcasts(run_count, try_count) :
-    time.sleep(5)
+def send_broadcasts() :
     for receiver_class in broadcasts :
         for broadcast in broadcasts[receiver_class] :
-            if (errors.get("monkey_"+str(run_count)+"_try_"+str(try_count)) == None) and (durations.get("monkey_"+str(run_count+1)) == None) :
-                call("adb shell am broadcast -a " + broadcast + " -n " + apk_package + "/" + receiver_class)
-            else :
-                thread.exit()
+            call("adb shell am broadcast -a " + broadcast + " -n " + apk_package + "/" + receiver_class)
 
-def send_activities(run_count, try_count) :
-    time.sleep(5)
+def run_all_activities() :
     for activity in static_features.get('activities') :
-        time.sleep(3)
-        if (errors.get("monkey_"+str(run_count)+"_try_"+str(try_count)) == None) and (durations.get("monkey_"+str(run_count+1)) == None) :
-            call("adb shell am start -n " + apk_package + "/" + activity)
-        else :
-            thread.exit()
+        call("adb shell am start -n " + apk_package + "/" + activity)
+        call("adb shell sh /data/local/tasks.sh monkey " + apk_package + " " + str(monkey_steps / 10) + " 123")
+
+def start_all_services() :
+    for service in static_features.get('services') :
+        call("adb shell am startservice " + apk_package + "/" + service)
 
 def check_data() :
     global errors, valid_analysis
     print_info("Checking files..")
 
-    files = ['tcpdump.pcap', 'radio.log', 'events.log', 'logcat.log']
+    files = ['tcpdump.pcap', 'radio.log', 'events.log', 'logcat.log', 'pids.log']
     for filename in files :
         if os.path.isfile(current_dir + "/../tmp/" + filename) == False :
             errors[filename.replace('.', "_")] = "not found"
-            valid_analysis = False
-    for i in xrange(0, monkey_runs) :
-        if os.path.isfile(current_dir + "/../tmp/strace_" + str(i) + ".log") == False :
-            errors["strace_" + str(i) + "_log"] = "not found"
             valid_analysis = False
 
             
@@ -294,7 +296,7 @@ def analyse_strace() :
 
     t_begin = time.time()
 
-    call("cd " + current_dir + "/../tmp && cat ./strace_*.log >> ./strace_all.log")
+    call("cd " + current_dir + "/../tmp && cat ./strace.log* >> ./strace_all.log")
     if os.path.isfile(current_dir + "/../tmp/strace_all.log") :
         strace = open( current_dir + "/../tmp/strace_all.log", "r" )
         for line in strace:
@@ -348,6 +350,7 @@ def save_data() :
         'valid'             : valid_analysis,
         'timeout'           : timed_out,
         'durations'         : durations,
+        'monkeyRuns'        : monkey_runs,
         'errors'            : errors,
         'accessedHostnames' : get_accessed_hostnames(),
         'accessedIps'       : get_accessed_ips(),
@@ -418,10 +421,21 @@ def main(options, args) :
     start_vm()
     connect_adb()
     push_tasks()
-    start_tcpdump()
-    start_logcat()
     install_apk()
-    monkey()
+    get_username()
+    start_tcpdump()
+    start_strace()
+    start_logcat()
+    
+    send_broadcasts()
+    start_all_services()
+
+    t_automation_begin = time.time()
+    run_all_activities()
+    monkey(t_automation_begin)
+    durations["automation"] = time.time() - t_automation_begin
+
+    stop_strace()
     stop_tcpdump()
     pull_data()
     stop_vm()
