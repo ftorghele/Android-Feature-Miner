@@ -178,7 +178,7 @@ def monkey(t_automation_begin) :
 
     t_monkey_begin = time.time()
     while duration < monkey_min_time :
-        if duration > (monkey_min_time / 2) and step_count > int(monkey_steps / 2):
+        if duration > ((monkey_min_time / 4) * 3) and step_count > int(monkey_steps / 2):
             step_count = int(step_count / 2)
 
         duration += run_monkey(step_count)
@@ -186,9 +186,9 @@ def monkey(t_automation_begin) :
 
         print "already run " + str(duration) + " seconds.."
 
-        if monkey_runs > 10 :
+        if monkey_runs >= 20 :
             valid_analysis = False
-            errors['monkey'] = "More than 10 runs to finish monkey."
+            errors['monkey'] = "More than 20 runs to finish monkey."
             break
 
     durations['monkey'] = time.time() - t_monkey_begin
@@ -232,6 +232,66 @@ def get_accessed_ips() :
         for line in output[0].split(os.linesep) :
             if line != "" :
                 result.append(line)
+    return result
+
+def get_destination_ports() :
+    print_info("Get destination ports..")
+    result = {}
+    if os.path.isfile(current_dir + "/../tmp/tcpdump.pcap") :
+        cmd    = "tshark -r " + current_dir + "/../tmp/tcpdump.pcap -Y 'tcp.dstport < 32768' -T fields -e tcp.dstport"
+        output = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=None, shell=True).communicate()
+        for line in output[0].split(os.linesep) :
+            if line != "" :
+                if line not in result :
+                    result[line] = 1
+                else :
+                    result[line] += 1
+    return result
+
+def get_content_types() :
+    print_info("Get content types..")
+    result = {}
+    if os.path.isfile(current_dir + "/../tmp/tcpdump.pcap") :
+        cmd    = "tshark -r " + current_dir + "/../tmp/tcpdump.pcap -T fields -e http.content_type"
+        output = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=None, shell=True).communicate()
+        for line in output[0].split(os.linesep) :
+            line = line.replace(".", "_")
+            line = re.sub(r";\s*charset=.*|,.*", "", line)
+            if line != "" :
+                if line not in result :
+                    result[line] = 1
+                else :
+                    result[line] += 1
+    return result
+
+def get_response_codes() :
+    print_info("Get response codes..")
+    result = {}
+    if os.path.isfile(current_dir + "/../tmp/tcpdump.pcap") :
+        cmd    = "tshark -r " + current_dir + "/../tmp/tcpdump.pcap -T fields -e http.response.code"
+        output = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=None, shell=True).communicate()
+        for line in output[0].split(os.linesep) :
+            line = line.replace(".", "_")
+            line = re.sub(r",.*", "", line)
+            if line != "" :
+                if line not in result :
+                    result[line] = 1
+                else :
+                    result[line] += 1
+    return result
+
+def get_used_http_methods() :
+    print_info("Get used HTTP methods..")
+    result = {}
+    if os.path.isfile(current_dir + "/../tmp/tcpdump.pcap") :
+        cmd    = "tshark -r " + current_dir + "/../tmp/tcpdump.pcap -T fields -e http.request.method"
+        output = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=None, shell=True).communicate()
+        for line in output[0].split(os.linesep) :
+            if line != "" and line in ["GET", "POST", "HEAD", "PUT", "DELETE", "TRACE", "OPTIONS"]:
+                if line not in result :
+                    result[line] = 1
+                else :
+                    result[line] += 1
     return result
 
 def get_broadcasts() :
@@ -352,8 +412,6 @@ def save_data() :
         'durations'         : durations,
         'monkeyRuns'        : monkey_runs,
         'errors'            : errors,
-        'accessedHostnames' : get_accessed_hostnames(),
-        'accessedIps'       : get_accessed_ips(),
         'methodCalls'       : method_calls,
         'accessedFiles'     : accessed_files,
         'openedFiles'       : opened_files,
@@ -361,6 +419,20 @@ def save_data() :
     }
 
     db.dynamic_features.insert(data)
+
+    traffic_data = {
+        '_id'               : hashfile(options.input),
+        'valid'             : valid_analysis,
+        'durations'         : durations,
+        'accessedHostnames' : get_accessed_hostnames(),
+        'accessedIps'       : get_accessed_ips(),
+        'destinationPorts'  : get_destination_ports(),
+        'contentTypes'      : get_content_types(),
+        'usedHttpMethods'   : get_used_http_methods(),
+        'responseCodes'     : get_response_codes(),
+    }
+
+    db.traffic_features.update({'_id':traffic_data['_id']}, traffic_data, True)
 
 def timeout(t_all_begin) :
     global durations, timed_out

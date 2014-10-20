@@ -5,6 +5,7 @@ import (
 	"github.com/AndroSOM/FeatureMiner/miner"
 	"github.com/AndroSOM/FeatureMiner/setup"
 	"github.com/mattn/go-gtk/gtk"
+	"gopkg.in/mgo.v2"
 	"os"
 	"os/exec"
 	"runtime"
@@ -195,6 +196,31 @@ func minerPage() *gtk.VBox {
 	dynamic_analysis_frame.Add(dynamic_analysis_hbox)
 	vbox.PackStart(dynamic_analysis_frame, false, true, 0)
 
+	/* Build Datasets */
+
+	build_datasets_frame := gtk.NewFrame("4. Build Datasets")
+	build_datasets_frame.SetBorderWidth(5)
+	build_datasets_frame.SetSensitive(false)
+
+	build_datasets_hbox := gtk.NewHBox(false, 0)
+	build_datasets_hbox.SetBorderWidth(10)
+	build_datasets_hbox.SetSizeRequest(-1, 60)
+
+	build_datasets_progress := gtk.NewProgressBar()
+	build_datasets_start_button := gtk.NewButtonWithLabel("Build Datasets")
+
+	build_datasets_cpu_count := gtk.NewSpinButtonWithRange(1, float64(runtime.NumCPU()), 1)
+	build_datasets_cpu_count_label := gtk.NewLabel("CPUs: ")
+	build_datasets_cpu_count.Spin(gtk.SPIN_USER_DEFINED, float64(runtime.NumCPU()))
+	build_datasets_cpu_count.SetSizeRequest(40, -1)
+
+	build_datasets_hbox.PackStart(build_datasets_start_button, false, true, 5)
+	build_datasets_hbox.PackStart(build_datasets_progress, true, true, 5)
+	build_datasets_hbox.PackStart(build_datasets_cpu_count_label, false, true, 5)
+	build_datasets_hbox.PackStart(build_datasets_cpu_count, false, true, 5)
+	build_datasets_frame.Add(build_datasets_hbox)
+	vbox.PackStart(build_datasets_frame, false, true, 0)
+
 	/* Helpers */
 
 	disable_gui := func() {
@@ -202,6 +228,7 @@ func minerPage() *gtk.VBox {
 		static_analysis_frame.SetSensitive(false)
 		dynamic_analysis_frame.SetSensitive(false)
 		vt_analysis_frame.SetSensitive(false)
+		build_datasets_frame.SetSensitive(false)
 	}
 
 	enable_gui := func() {
@@ -209,6 +236,7 @@ func minerPage() *gtk.VBox {
 		static_analysis_frame.SetSensitive(true)
 		dynamic_analysis_frame.SetSensitive(true)
 		vt_analysis_frame.SetSensitive(true)
+		build_datasets_frame.SetSensitive(true)
 	}
 
 	/* Events */
@@ -227,13 +255,75 @@ func minerPage() *gtk.VBox {
 	})
 
 	static_analysis_start_button.Connect("clicked", func() {
+		session, err := mgo.Dial("localhost:6662")
+		if err != nil {
+			panic(err)
+		}
+		defer session.Close()
+		session.SetMode(mgo.Monotonic, true)
+
+		db := session.DB("androsom")
+		if count, _ := db.C("virustotal_features").Count(); count == 0 {
+			displayDialog("get VirusTotal metadata first.")
+			return
+		}
+
 		fmt.Println("starting static analysis..")
 		disable_gui()
 		miner.Analysis(&apks, static_analysis_progress, output_folder, "static_analysis.py", static_analysis_cpu_count.GetValueAsInt())
 		enable_gui()
 	})
 
+	build_datasets_start_button.Connect("clicked", func() {
+		session, err := mgo.Dial("localhost:6662")
+		if err != nil {
+			panic(err)
+		}
+		defer session.Close()
+		session.SetMode(mgo.Monotonic, true)
+
+		db := session.DB("androsom")
+		if count, _ := db.C("static_features").Count(); count == 0 {
+			displayDialog("run static analysis first.")
+			return
+		}
+		if count, _ := db.C("dynamic_features").Count(); count == 0 {
+			displayDialog("run dynamic analysis first.")
+			return
+		}
+		if count, _ := db.C("virustotal_features").Count(); count == 0 {
+			displayDialog("get VirusTotal metadata first.")
+			return
+		}
+
+		db.C("analysis_traffic_features").DropCollection()
+		db.C("analysis_static_features").DropCollection()
+		db.C("analysis_dynamic_features").DropCollection()
+
+		fmt.Println("building datasets..")
+		disable_gui()
+		miner.Analysis(&apks, build_datasets_progress, output_folder, "build_datasets_prepare.py", build_datasets_cpu_count.GetValueAsInt())
+		enable_gui()
+	})
+
 	dynamic_analysis_start_button.Connect("clicked", func() {
+		session, err := mgo.Dial("localhost:6662")
+		if err != nil {
+			panic(err)
+		}
+		defer session.Close()
+		session.SetMode(mgo.Monotonic, true)
+
+		db := session.DB("androsom")
+		if count, _ := db.C("static_features").Count(); count == 0 {
+			displayDialog("run static analysis first.")
+			return
+		}
+		if count, _ := db.C("virustotal_features").Count(); count == 0 {
+			displayDialog("get VirusTotal metadata first.")
+			return
+		}
+
 		fmt.Println("starting dynamic analysis..")
 		disable_gui()
 		miner.Analysis(&apks, dynamic_analysis_progress, output_folder, "dynamic_analysis.py", 1)
