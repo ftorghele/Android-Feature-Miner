@@ -296,9 +296,7 @@ func minerPage() *gtk.VBox {
 			return
 		}
 
-		db.C("analysis_traffic_features").DropCollection()
-		db.C("analysis_static_features").DropCollection()
-		db.C("analysis_dynamic_features").DropCollection()
+		db.C("features").DropCollection()
 
 		fmt.Println("building datasets..")
 		disable_gui()

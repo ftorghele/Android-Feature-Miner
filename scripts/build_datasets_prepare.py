@@ -24,7 +24,7 @@
 # THE SOFTWARE.
 # ----------------------------------------------------------------------------------
 
-import sys, hashlib, time, requests, json, os, threading, weakref
+import sys, hashlib, time, requests, json, os, re
 
 from optparse import OptionParser
 from pymongo import MongoClient
@@ -69,50 +69,152 @@ def set_malware_label() :
     if vt_metadata.get('positives') != 0 :
         malware = True
 
-def analyse_traffic_features() :
-    global malware
-
-    traffic_data       = db.traffic_features.find_one({"_id": hashfile(options.input)})
-    time_multiplicator = (1 / traffic_data.get('durations')['all']) * 60
+def analyse_dynamic_features() :
+    dynamic_data    = db.dynamic_features.find_one({"_id": hashfile(options.input)})
+    time_multiplier = (1 / dynamic_data.get('durations')['all']) * 120
 
     tasks = [
+        "methodCalls",
+    ]
+    upsert_simple_feature_array("dynamic", dynamic_data, ["methodCalls"], time_multiplier)
+
+    tasks = [
+        "accessedFiles",
+        "openedFiles",
+        "chmodedFiles",
+    ]
+    upsert_file_feature_array("dynamic", dynamic_data, tasks, time_multiplier)
+
+def analyse_static_features() :
+    static_data = db.static_features.find_one({"_id": hashfile(options.input)})
+
+    tasks = [
+        "isCryptoCode",
+        "isDynamicCode",
+        "isNativeCode",
+        "isAsciiObfuscation",
+        "isReflectionCode",
+        "maxSdkVersion",
+        "minSdkVersion",
+        "targetSdkVersion",
+        "androidVersion"
+    ]
+    for task in tasks :
+        x = static_data.get(task)
+        upsert_simple_feature("static", static_data, x, task)
+
+    tasks = [
+        "nativeMethodCount",
+        "reflectionCount"
+    ]
+    for task in tasks :
+        upsert_feature("static", static_data.get(task, 0), None, task, 1)
+
+    tasks = [
+        "activities",
+        "providers",
+        "receivers",
+        "services",
+        "permissions",
+        "libraries"
+    ]
+    for task in tasks :
+        results = static_data.get(task)
+        for x in results :
+            match = re.search('\.([^\.]*)$', x)
+            if match != None :
+                x  = match.group(1)
+            upsert_simple_feature("static", static_data, x, task)
+
+
+    libraries = static_data.get("libraries")
+    for library in libraries :
+        library = library.replace(".", "_")
+        upsert_simple_feature("static", static_data, library, "libraries")
+
+    #
+    # todo: externalMethodCalls
+    # 
+
+def analyse_traffic_features() :
+    traffic_data    = db.traffic_features.find_one({"_id": hashfile(options.input)})
+    time_multiplier = (1 / traffic_data.get('durations')['all']) * 120
+    tasks = [
         "responseCodes",
+        "accessedIps",
+        "accessedHostnames",
         "destinationPorts",
         "contentTypes"
     ]
+    upsert_simple_feature_array("traffic", traffic_data, tasks, time_multiplier)
 
-    if traffic_data != None :
+def upsert_file_feature_array(prefix, data, tasks, multiplier) :
+    if data != None :
         for task in tasks :
-            responseCodes = traffic_data.get(task)
-            for x in responseCodes :
-                myId = task + "_" + x
-                entry = db.analysis_traffic_features.find_one({"_id": myId})
-                if entry == None :
-                    entry = {
-                        '_id'               : myId,
-                        'inMalwareCount'    : 1 if malware else 0,
-                        'inBenignCount'     : 0 if malware else 1,
-                        'maxValue'          : responseCodes[x] * time_multiplicator,
-                        'minValue'          : responseCodes[x] * time_multiplicator,
-                    }
-                    db.analysis_traffic_features.find_and_modify({'_id':myId}, entry, upsert=True)
-                else :
-                    if malware :
-                        entry['inMalwareCount'] += 1
-                    else :
-                        entry['inBenignCount'] += 1
+            results = data.get(task)
+            for x in results :
+                match = re.search('([^\/]*)$', x)
+                if match != None :
+                    x  = match.group(1)
+                upsert_feature(prefix, results.get(x, 0), x, task, multiplier)
 
-                    if entry['maxValue'] < responseCodes[x] * time_multiplicator :
-                        entry['maxValue'] = responseCodes[x] * time_multiplicator
-                    if entry['minValue'] > responseCodes[x] * time_multiplicator :
-                        entry['minValue'] = responseCodes[x] * time_multiplicator
+def upsert_simple_feature(prefix, data, x, task) :
+    global malware
+    myId = prefix + "_" + task + "__" + str(x)
+    entry = db.features.find_one({"_id": myId})
+    if entry == None :
+        entry = {
+            '_id'               : myId,
+            'inMalwareCount'    : 1 if malware else 0,
+            'inBenignCount'     : 0 if malware else 1,
+        }
+        db.features.find_and_modify({'_id':myId}, entry, upsert=True)
+    else :
+        if malware :
+            entry['inMalwareCount'] += 1
+        else :
+            entry['inBenignCount'] += 1
 
-                    db.analysis_traffic_features.find_and_modify({'_id':myId}, entry)
+        db.features.find_and_modify({'_id':myId}, entry)
 
+def upsert_simple_feature_array(prefix, data, tasks, multiplier) :
+    if data != None :
+        for task in tasks :
+            results = data.get(task)
+            for x in results :
+                upsert_feature(prefix, results.get(x, 0), x, task, multiplier)
+
+def upsert_feature(prefix, data, x, task, multiplier) :
+    global malware
+    if x != None :
+        myId = prefix + "_" + task + "__" + str(x)
+    else :
+        myId = prefix + "_" + task
+    
+    entry = db.features.find_one({"_id": myId})
+    if entry == None :
+        entry = {
+            '_id'               : myId,
+            'inMalwareCount'    : 1 if malware else 0,
+            'inBenignCount'     : 0 if malware else 1,
+            'maxValue'          : data * multiplier,
+            'minValue'          : data * multiplier,
+        }
+        db.features.find_and_modify({'_id':myId}, entry, upsert=True)
+    else :
+        if malware :
+            entry['inMalwareCount'] += 1
+        else :
+            entry['inBenignCount'] += 1
+
+        if entry['maxValue'] < data * multiplier :
+            entry['maxValue'] = data * multiplier
+        if entry['minValue'] > data * multiplier :
+            entry['minValue'] = data * multiplier
+
+        db.features.find_and_modify({'_id':myId}, entry)
 
 def main(options, args) :
-    global traffic_data
-
     if options.input == None or options.output == None :
         print "build_database_prepare.py -i <inputfile> -o <outputfolder>"
         sys.exit(2)
@@ -134,7 +236,8 @@ def main(options, args) :
     else :
         set_malware_label()
         analyse_traffic_features()
-
+        analyse_dynamic_features()
+        analyse_static_features()
 
 
 if __name__ == "__main__" :

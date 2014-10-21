@@ -214,24 +214,32 @@ def fix_pcap() :
 
 def get_accessed_hostnames() :
     print_info("Get accessed hostnames..")
-    result = []
+    result = {}
     if os.path.isfile(current_dir + "/../tmp/tcpdump.pcap") :
-        cmd    = "tshark -2 -r  " + current_dir + "/../tmp/tcpdump.pcap -R \"dns.flags.response == 0\" -T fields -e dns.qry.name -e dns.qry | sort | uniq"
+        cmd    = "tshark -2 -r  " + current_dir + "/../tmp/tcpdump.pcap -R \"dns.flags.response == 0\" -T fields -e dns.qry.name -e dns.qry"
         output = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=None, shell=True).communicate()
         for line in output[0].split(os.linesep) :
+            line = line.strip().replace(".", "_")
             if line != "" :
-                result.append(line.strip())
+                if line not in result :
+                    result[line] = 1
+                else :
+                    result[line] += 1
     return result
 
 def get_accessed_ips() :
     print_info("Get accessed ips..")
-    result = []
+    result = {}
     if os.path.isfile(current_dir + "/../tmp/tcpdump.pcap") :
-        cmd    = "tshark -r " + current_dir + "/../tmp/tcpdump.pcap -T fields -e ip.dst ip.src | sort | uniq"
+        cmd    = "tshark -r " + current_dir + "/../tmp/tcpdump.pcap -T fields -e ip.dst ip.src"
         output = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=None, shell=True).communicate()
         for line in output[0].split(os.linesep) :
+            line = line.replace(".", "_")
             if line != "" :
-                result.append(line)
+                if line not in result :
+                    result[line] = 1
+                else :
+                    result[line] += 1
     return result
 
 def get_destination_ports() :
