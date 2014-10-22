@@ -76,14 +76,20 @@ def analyse_dynamic_features() :
     tasks = [
         "methodCalls",
     ]
-    upsert_simple_feature_array("dynamic", dynamic_data, ["methodCalls"], time_multiplier)
+    upsert_feature_array("dynamic", dynamic_data, ["methodCalls"], time_multiplier)
 
     tasks = [
         "accessedFiles",
         "openedFiles",
         "chmodedFiles",
     ]
-    upsert_file_feature_array("dynamic", dynamic_data, tasks, time_multiplier)
+    for task in tasks :
+        results = dynamic_data.get(task)
+        for x in results :
+            match = re.search('([^\/]*)$', x)
+            if match != None :
+                x  = match.group(1)
+            upsert_feature("dynamic", results.get(x, 0), x, task, time_multiplier)
 
 def analyse_static_features() :
     static_data = db.static_features.find_one({"_id": hashfile(options.input)})
@@ -132,9 +138,29 @@ def analyse_static_features() :
         library = library.replace(".", "_")
         upsert_simple_feature("static", static_data, library, "libraries")
 
-    #
-    # todo: externalMethodCalls
-    # 
+    actualPermissions = static_data.get("actualPermissions")
+    for permission in actualPermissions :
+        upsert_signature_feature("static", actualPermissions[permission], permission)
+
+    externalMethodCalls = static_data.get("externalMethodCalls")
+    upsert_signature_feature("static", externalMethodCalls, "externalMethodCalls")
+
+    #internalMethodCalls = static_data.get("internalMethodCalls")
+    #upsert_signature_feature("static", internalMethodCalls, "internalMethodCalls")
+
+def upsert_signature_feature(prefix, data, task) :
+    if data != None :
+        for namespace in data :
+            for classname in data.get(namespace) :
+                class_part = classname[1:] + "->"
+                for methodname in data.get(namespace).get(classname) :
+                    signature = class_part + methodname
+                    signature = signature.replace(";", "")
+                    count = 0
+                    for call in data.get(namespace).get(classname).get(methodname) :
+                        count += data.get(namespace).get(classname).get(methodname).get(call)
+
+                    upsert_feature(prefix, count, signature, task, 1)
 
 def analyse_traffic_features() :
     traffic_data    = db.traffic_features.find_one({"_id": hashfile(options.input)})
@@ -146,17 +172,7 @@ def analyse_traffic_features() :
         "destinationPorts",
         "contentTypes"
     ]
-    upsert_simple_feature_array("traffic", traffic_data, tasks, time_multiplier)
-
-def upsert_file_feature_array(prefix, data, tasks, multiplier) :
-    if data != None :
-        for task in tasks :
-            results = data.get(task)
-            for x in results :
-                match = re.search('([^\/]*)$', x)
-                if match != None :
-                    x  = match.group(1)
-                upsert_feature(prefix, results.get(x, 0), x, task, multiplier)
+    upsert_feature_array("traffic", traffic_data, tasks, time_multiplier)
 
 def upsert_simple_feature(prefix, data, x, task) :
     global malware
@@ -177,7 +193,7 @@ def upsert_simple_feature(prefix, data, x, task) :
 
         db.features.find_and_modify({'_id':myId}, entry)
 
-def upsert_simple_feature_array(prefix, data, tasks, multiplier) :
+def upsert_feature_array(prefix, data, tasks, multiplier) :
     if data != None :
         for task in tasks :
             results = data.get(task)
@@ -186,10 +202,11 @@ def upsert_simple_feature_array(prefix, data, tasks, multiplier) :
 
 def upsert_feature(prefix, data, x, task, multiplier) :
     global malware
+    myId = prefix
+    if task != None :
+        myId += "_" + task 
     if x != None :
-        myId = prefix + "_" + task + "__" + str(x)
-    else :
-        myId = prefix + "_" + task
+        myId += "__" + str(x)
     
     entry = db.features.find_one({"_id": myId})
     if entry == None :
@@ -238,7 +255,6 @@ def main(options, args) :
         analyse_traffic_features()
         analyse_dynamic_features()
         analyse_static_features()
-
 
 if __name__ == "__main__" :
     parser = OptionParser()
