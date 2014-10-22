@@ -88,8 +88,8 @@ def analyse_dynamic_features() :
         for x in results :
             match = re.search('([^\/]*)$', x)
             if match != None :
-                x  = match.group(1)
-            upsert_feature("dynamic", results.get(x, 0), x, task, time_multiplier)
+                id_part  = match.group(1)
+            upsert_feature("dynamic", results.get(x, 0), id_part, task, time_multiplier)
 
 def analyse_static_features() :
     static_data = db.static_features.find_one({"_id": hashfile(options.input)})
@@ -107,14 +107,14 @@ def analyse_static_features() :
     ]
     for task in tasks :
         x = static_data.get(task)
-        upsert_simple_feature("static", static_data, x, task)
+        upsert_simple_feature("static", x, task)
 
     tasks = [
         "nativeMethodCount",
         "reflectionCount"
     ]
     for task in tasks :
-        upsert_feature("static", static_data.get(task, 0), None, task, 1)
+        upsert_simple_feature("static", None, task)
 
     tasks = [
         "activities",
@@ -130,13 +130,13 @@ def analyse_static_features() :
             match = re.search('\.([^\.]*)$', x)
             if match != None :
                 x  = match.group(1)
-            upsert_simple_feature("static", static_data, x, task)
+            upsert_simple_feature("static", x, task)
 
 
     libraries = static_data.get("libraries")
     for library in libraries :
         library = library.replace(".", "_")
-        upsert_simple_feature("static", static_data, library, "libraries")
+        upsert_simple_feature("static", library, "libraries")
 
     actualPermissions = static_data.get("actualPermissions")
     for permission in actualPermissions :
@@ -174,24 +174,24 @@ def analyse_traffic_features() :
     ]
     upsert_feature_array("traffic", traffic_data, tasks, time_multiplier)
 
-def upsert_simple_feature(prefix, data, x, task) :
+def upsert_simple_feature(prefix, x, task) :
     global malware
     myId = prefix + "_" + task + "__" + str(x)
-    entry = db.features.find_one({"_id": myId})
+    entry = db[options.collection].find_one({"_id": myId})
     if entry == None :
         entry = {
             '_id'               : myId,
             'inMalwareCount'    : 1 if malware else 0,
             'inBenignCount'     : 0 if malware else 1,
         }
-        db.features.find_and_modify({'_id':myId}, entry, upsert=True)
+        db[options.collection].find_and_modify({'_id':myId}, entry, upsert=True)
     else :
         if malware :
             entry['inMalwareCount'] += 1
         else :
             entry['inBenignCount'] += 1
 
-        db.features.find_and_modify({'_id':myId}, entry)
+        db[options.collection].find_and_modify({'_id':myId}, entry)
 
 def upsert_feature_array(prefix, data, tasks, multiplier) :
     if data != None :
@@ -208,7 +208,7 @@ def upsert_feature(prefix, data, x, task, multiplier) :
     if x != None :
         myId += "__" + str(x)
     
-    entry = db.features.find_one({"_id": myId})
+    entry = db[options.collection].find_one({"_id": myId})
     if entry == None :
         entry = {
             '_id'               : myId,
@@ -217,7 +217,7 @@ def upsert_feature(prefix, data, x, task, multiplier) :
             'maxValue'          : data * multiplier,
             'minValue'          : data * multiplier,
         }
-        db.features.find_and_modify({'_id':myId}, entry, upsert=True)
+        db[options.collection].find_and_modify({'_id':myId}, entry, upsert=True)
     else :
         if malware :
             entry['inMalwareCount'] += 1
@@ -229,7 +229,7 @@ def upsert_feature(prefix, data, x, task, multiplier) :
         if entry['minValue'] > data * multiplier :
             entry['minValue'] = data * multiplier
 
-        db.features.find_and_modify({'_id':myId}, entry)
+        db[options.collection].find_and_modify({'_id':myId}, entry)
 
 def main(options, args) :
     if options.input == None or options.output == None :
@@ -260,6 +260,7 @@ if __name__ == "__main__" :
     parser = OptionParser()
     parser.add_option("-i", "--input", dest="input", help="path to the APK file which shoud be analysed.")
     parser.add_option("-o", "--output", dest="output", help="folder to store pulled files.")
+    parser.add_option("-c", "--collection", dest="collection", default="features", help="database collection to store data.")
     (options, args) = parser.parse_args()
 
     sys.argv[:] = args

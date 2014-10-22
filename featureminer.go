@@ -27,6 +27,9 @@ func createWindow() *gtk.Window {
 	main_page := gtk.NewFrame("Miner")
 	main_page.Add(minerPage())
 	notebook.AppendPage(main_page, gtk.NewLabel("Feature Miner"))
+	build_dataset_page := gtk.NewFrame("Build Dataset")
+	build_dataset_page.Add(buildDatasetPage())
+	notebook.AppendPage(build_dataset_page, gtk.NewLabel("Build Dataset"))
 	setup_page := gtk.NewFrame("Setup")
 	setup_page.Add(setupPage())
 	notebook.AppendPage(setup_page, gtk.NewLabel("Dependencies"))
@@ -196,31 +199,6 @@ func minerPage() *gtk.VBox {
 	dynamic_analysis_frame.Add(dynamic_analysis_hbox)
 	vbox.PackStart(dynamic_analysis_frame, false, true, 0)
 
-	/* Build Datasets */
-
-	build_datasets_frame := gtk.NewFrame("4. Build Datasets")
-	build_datasets_frame.SetBorderWidth(5)
-	build_datasets_frame.SetSensitive(false)
-
-	build_datasets_hbox := gtk.NewHBox(false, 0)
-	build_datasets_hbox.SetBorderWidth(10)
-	build_datasets_hbox.SetSizeRequest(-1, 60)
-
-	build_datasets_progress := gtk.NewProgressBar()
-	build_datasets_start_button := gtk.NewButtonWithLabel("Build Datasets")
-
-	build_datasets_cpu_count := gtk.NewSpinButtonWithRange(1, float64(runtime.NumCPU()), 1)
-	build_datasets_cpu_count_label := gtk.NewLabel("CPUs: ")
-	build_datasets_cpu_count.Spin(gtk.SPIN_USER_DEFINED, float64(runtime.NumCPU()))
-	build_datasets_cpu_count.SetSizeRequest(40, -1)
-
-	build_datasets_hbox.PackStart(build_datasets_start_button, false, true, 5)
-	build_datasets_hbox.PackStart(build_datasets_progress, true, true, 5)
-	build_datasets_hbox.PackStart(build_datasets_cpu_count_label, false, true, 5)
-	build_datasets_hbox.PackStart(build_datasets_cpu_count, false, true, 5)
-	build_datasets_frame.Add(build_datasets_hbox)
-	vbox.PackStart(build_datasets_frame, false, true, 0)
-
 	/* Helpers */
 
 	disable_gui := func() {
@@ -228,7 +206,6 @@ func minerPage() *gtk.VBox {
 		static_analysis_frame.SetSensitive(false)
 		dynamic_analysis_frame.SetSensitive(false)
 		vt_analysis_frame.SetSensitive(false)
-		build_datasets_frame.SetSensitive(false)
 	}
 
 	enable_gui := func() {
@@ -236,7 +213,6 @@ func minerPage() *gtk.VBox {
 		static_analysis_frame.SetSensitive(true)
 		dynamic_analysis_frame.SetSensitive(true)
 		vt_analysis_frame.SetSensitive(true)
-		build_datasets_frame.SetSensitive(true)
 	}
 
 	/* Events */
@@ -250,6 +226,7 @@ func minerPage() *gtk.VBox {
 			} else {
 				apk_count_label.SetLabel("No APKs found in this input folder..")
 				disable_gui()
+				general_analysis_frame.SetSensitive(true)
 			}
 		}
 	})
@@ -271,36 +248,6 @@ func minerPage() *gtk.VBox {
 		fmt.Println("starting static analysis..")
 		disable_gui()
 		miner.Analysis(&apks, static_analysis_progress, output_folder, "static_analysis.py", static_analysis_cpu_count.GetValueAsInt())
-		enable_gui()
-	})
-
-	build_datasets_start_button.Connect("clicked", func() {
-		session, err := mgo.Dial("localhost:6662")
-		if err != nil {
-			panic(err)
-		}
-		defer session.Close()
-		session.SetMode(mgo.Monotonic, true)
-
-		db := session.DB("androsom")
-		if count, _ := db.C("static_features").Count(); count == 0 {
-			displayDialog("run static analysis first.")
-			return
-		}
-		if count, _ := db.C("dynamic_features").Count(); count == 0 {
-			displayDialog("run dynamic analysis first.")
-			return
-		}
-		if count, _ := db.C("virustotal_features").Count(); count == 0 {
-			displayDialog("get VirusTotal metadata first.")
-			return
-		}
-
-		db.C("features").DropCollection()
-
-		fmt.Println("building datasets..")
-		disable_gui()
-		miner.Analysis(&apks, build_datasets_progress, output_folder, "build_datasets_prepare.py", build_datasets_cpu_count.GetValueAsInt())
 		enable_gui()
 	})
 
@@ -345,6 +292,138 @@ func minerPage() *gtk.VBox {
 			miner.VirusTotal(&apks, vt_analysis_progress, api_key, api_request_pause_ms, api_request_cpu_count)
 			enable_gui()
 		}
+	})
+
+	return vbox
+}
+
+func buildDatasetPage() *gtk.VBox {
+	vbox := gtk.NewVBox(false, 1)
+
+	/* Prepare Build Datasets */
+
+	prepare_frame := gtk.NewFrame("Preparation")
+	prepare_frame.SetBorderWidth(5)
+
+	prepare_hbox := gtk.NewHBox(false, 0)
+	prepare_hbox.SetBorderWidth(10)
+	prepare_hbox.SetSizeRequest(-1, 60)
+
+	prepare_progress := gtk.NewProgressBar()
+	prepare_start_button := gtk.NewButtonWithLabel("   Run   ")
+
+	prepare_cpu_count := gtk.NewSpinButtonWithRange(1, float64(runtime.NumCPU()), 1)
+	prepare_cpu_count_label := gtk.NewLabel("CPUs: ")
+	prepare_cpu_count.Spin(gtk.SPIN_USER_DEFINED, float64(runtime.NumCPU()))
+	prepare_cpu_count.SetSizeRequest(40, -1)
+
+	prepare_hbox.PackStart(prepare_start_button, false, true, 5)
+	prepare_hbox.PackStart(prepare_progress, true, true, 5)
+	prepare_hbox.PackStart(prepare_cpu_count_label, false, true, 5)
+	prepare_hbox.PackStart(prepare_cpu_count, false, true, 5)
+	prepare_frame.Add(prepare_hbox)
+	vbox.PackStart(prepare_frame, false, true, 0)
+
+	/* Build Datasets */
+
+	build_datasets_frame := gtk.NewFrame("Build Datasets")
+	build_datasets_frame.SetBorderWidth(5)
+
+	build_datasets_hbox := gtk.NewHBox(false, 0)
+	build_datasets_hbox.SetBorderWidth(10)
+	build_datasets_hbox.SetSizeRequest(-1, 60)
+
+	build_datasets_progress := gtk.NewProgressBar()
+	build_datasets_start_button := gtk.NewButtonWithLabel("   Run   ")
+
+	build_datasets_cpu_count := gtk.NewSpinButtonWithRange(1, float64(runtime.NumCPU()), 1)
+	build_datasets_cpu_count_label := gtk.NewLabel("CPUs: ")
+	build_datasets_cpu_count.Spin(gtk.SPIN_USER_DEFINED, float64(runtime.NumCPU()))
+	build_datasets_cpu_count.SetSizeRequest(40, -1)
+
+	build_datasets_hbox.PackStart(build_datasets_start_button, false, true, 5)
+	build_datasets_hbox.PackStart(build_datasets_progress, true, true, 5)
+	build_datasets_hbox.PackStart(build_datasets_cpu_count_label, false, true, 5)
+	build_datasets_hbox.PackStart(build_datasets_cpu_count, false, true, 5)
+	build_datasets_frame.Add(build_datasets_hbox)
+	vbox.PackStart(build_datasets_frame, false, true, 0)
+
+	/* Helpers */
+
+	disable_gui := func() {
+		prepare_frame.SetSensitive(false)
+		build_datasets_frame.SetSensitive(false)
+	}
+
+	enable_gui := func() {
+		prepare_frame.SetSensitive(true)
+		build_datasets_frame.SetSensitive(true)
+	}
+
+	/* Events */
+
+	prepare_start_button.Connect("clicked", func() {
+		session, err := mgo.Dial("localhost:6662")
+		if err != nil {
+			panic(err)
+		}
+		defer session.Close()
+		session.SetMode(mgo.Monotonic, true)
+
+		db := session.DB("androsom")
+		if count, _ := db.C("static_features").Count(); count == 0 {
+			displayDialog("run static analysis first.")
+			return
+		}
+		if count, _ := db.C("dynamic_features").Count(); count == 0 {
+			displayDialog("run dynamic analysis first.")
+			return
+		}
+		if count, _ := db.C("virustotal_features").Count(); count == 0 {
+			displayDialog("get VirusTotal metadata first.")
+			return
+		}
+
+		if len(apks) == 0 {
+			displayDialog("load APKs first (Feature Miner Tab).")
+			return
+		}
+
+		db.C("features").DropCollection()
+
+		fmt.Println("preperation for building datasets..")
+		disable_gui()
+		miner.Analysis(&apks, prepare_progress, output_folder, "build_datasets_prepare.py", prepare_cpu_count.GetValueAsInt())
+		enable_gui()
+	})
+
+	build_datasets_start_button.Connect("clicked", func() {
+		session, err := mgo.Dial("localhost:6662")
+		if err != nil {
+			panic(err)
+		}
+		defer session.Close()
+		session.SetMode(mgo.Monotonic, true)
+
+		db := session.DB("androsom")
+		if count, _ := db.C("features").Count(); count == 0 {
+			displayDialog("run preperation first.")
+			return
+		}
+
+		if len(apks) == 0 {
+			displayDialog("load APKs first (Feature Miner Tab).")
+			return
+		}
+		if output_folder == "" {
+			displayDialog("set output folder first (Feature Miner Tab).")
+			return
+		}
+
+		fmt.Println("building datasets..")
+		disable_gui()
+		miner.Analysis(&apks, build_datasets_progress, output_folder, "build_datasets.py", build_datasets_cpu_count.GetValueAsInt())
+		enable_gui()
 	})
 
 	return vbox
