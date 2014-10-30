@@ -33,92 +33,88 @@ current_dir = os.path.dirname(sys.argv[0])
 
 client      = MongoClient('localhost', 6662)
 db          = client.androsom
-filehash    = None
 
-malware     = False
-
-def hashfile(filepath) :
-    global filehash
-
-    if filehash != None :
-        return filehash
-
-    collection = db.file_hashes
-    data       = collection.find_one({"path": filepath})
-
-    if data == None :
-        sha1 = hashlib.sha1()
-        f = open(filepath, 'rb')
-        try:
-            sha1.update(f.read())
-        finally:
-            f.close()
-        filehash = sha1.hexdigest()
-
-        data = {
-            'path' : filepath,
-            'hash' : filehash
-        }
-        collection.insert(data)
-    else :
-        filehash = data.get('hash')
-
-    return filehash
-
-def set_malware_label() :
-    global malware
-    vt_metadata = db.virustotal_features.find_one({"sha1": hashfile(options.input)})
-    if vt_metadata.get('positives') != 0 :
-        malware = True
-
-def analyze_sample() :
-    cmd = current_dir + "/build_datasets_prepare.py -i " + options.input + " -o " + options.output + " -c features_" + hashfile(options.input)
-    subprocess.Popen(cmd, stdout=None, stderr=None, shell=True).wait()
-
-    f = open(current_dir + '/../tmp/' + hashfile(options.input) + '.features', 'w')
-
-    for feature in db.features.find().sort("_id", 1) :
-        if db["features_" + hashfile(options.input)].find({"_id": feature.get('_id')}).count() > 0 :
-            sample = db["features_" + hashfile(options.input)].find_one({"_id": feature.get('_id')})
-            maxValue = feature.get('maxValue', None)
-            if maxValue != None :
-                value = (1 / maxValue) * sample.get('maxValue')
-                f.write("%s, " % str(value))
-            else :
-                f.write("1, ")
-        else :
-            f.write("0, ")
-    f.write("0\n")        
-    f.close()
-    db.drop_collection('features_' + hashfile(options.input))
+def count_files(path,extension):
+    list_dir = []
+    list_dir = os.listdir(path)
+    count = 0
+    for file in list_dir:
+        if file.endswith(extension):
+            count += 1
+    return count
 
 def main(options, args) :
-    if options.input == None or options.output == None :
-        print "build_database.py -i <inputfile> -o <outputfolder>"
+    feature_count = count_files(current_dir + "/../tmp/", "features")
+
+    if options.output == None :
+        print "build_datasets.py -o <outputfolder>"
         sys.exit(2)
-    elif db.dynamic_features.find({"_id": hashfile(options.input), "valid": True}).count() == 0 :
-        print "no valid dynamic analysis found.. skipping.."
-        sys.exit(0)
-    elif db.traffic_features.find({"_id": hashfile(options.input), "valid": True}).count() == 0 :
-        print "no valid traffic analysis found.. skipping.."
-        sys.exit(0)
-    elif db.virustotal_features.find({"sha1": hashfile(options.input)}).count() == 0 :
-        print "virus total metadata not found.. skipping.."
-        sys.exit(0)
-    elif db.virustotal_features.find({ "$or": [ { "positives": 0 }, { "positives": { "$gte": 35 } } ], "sha1": hashfile(options.input) }).count() == 0 :
-        print "not clear enough benign or malicious.. skipping.."
-        sys.exit(0)
-    elif db.static_features.find({"_id": hashfile(options.input)}).count() == 0 :
-        print "no valid static analysis found.. skipping.."
+    elif feature_count == 0 :
+        print "no feature vectors found in tmp folder.."
         sys.exit(0)
     else :
-        set_malware_label()
-        analyze_sample()
+        print "found " + str(feature_count) + " features.."
 
+        dataset              = open(options.output + "/X", 'w')
+        classes              = open(options.output + "/class", 'w')
+        samples              = open(options.output + "/label_sample", 'w')
+        features             = open(options.output + "/label_variable", 'w')
+
+        for feature in db.features.find({ "$or": [ { "inMalwareCount": { "$gte": 50 } }, { "inBenignCount": { "$gte": 50 } } ] }).sort("_id", 1) :
+            features.write(feature.get('_id') + "\n")
+
+        #labels_malware_ids   = open(options.output + "/labels_malware_ids.androsom", 'w')
+        #labels_malware_names = open(options.output + "/labels_malware_names.androsom", 'w')
+
+        sample_labels = ["benign"]
+
+        list_dir = []
+        list_dir = os.listdir(current_dir + "/../tmp/")
+        for file in list_dir :
+            if file.endswith("features") :
+                with open(current_dir + "/../tmp/"+ file, 'r') as f:
+                    dataset.write(f.readline())
+
+                sample_name = file.replace(".features", "")
+
+                samples.write(sample_name + "\n")
+
+                metadata = db.virustotal_features.find_one({"sha1": sample_name})
+
+                if metadata.get('positives') == 0 :
+                    classes.write("1\n")
+                    #labels_malware_ids.write("0\n")
+                else :
+                    classes.write("2\n")
+                    '''
+                    scans = metadata.get('scans')
+                    sample_label = "???"
+                    for vendor in ["Symantec", "Avast", "BitDefender", "F-Secure", "AVG"] :
+                        vendor = scans.get(vendor)
+                        if vendor != None :
+                            result = vendor.get('result')
+                            if result != None :
+                                sample_label = result
+                                break
+
+                    if sample_label not in sample_labels :
+                        sample_labels.append(sample_label)
+
+                    labels_malware_ids.write(str(sample_labels.index(sample_label)) + "\n")
+
+        for i in sample_labels :
+            labels_malware_names.write(str(sample_labels.index(i)) + "\t" + str(i) + "\n")
+        '''
+        dataset.close()
+        classes.close()
+        samples.close()
+        features.close()
+
+        #labels_malware_ids.close()
+        #labels_malware_names.close()
 
 if __name__ == "__main__" :
     parser = OptionParser()
-    parser.add_option("-i", "--input", dest="input", help="path to the APK file which shoud be analysed.")
     parser.add_option("-o", "--output", dest="output", help="folder to store pulled files.")
     (options, args) = parser.parse_args()
 

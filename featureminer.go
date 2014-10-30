@@ -8,6 +8,7 @@ import (
 	"gopkg.in/mgo.v2"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strconv"
 )
@@ -393,7 +394,7 @@ func buildDatasetPage() *gtk.VBox {
 
 		fmt.Println("preperation for building datasets..")
 		disable_gui()
-		miner.Analysis(&apks, prepare_progress, output_folder, "build_datasets_prepare.py", prepare_cpu_count.GetValueAsInt())
+		miner.Analysis(&apks, prepare_progress, output_folder, "build_feature_vector_prepare.py", prepare_cpu_count.GetValueAsInt())
 		enable_gui()
 	})
 
@@ -422,7 +423,39 @@ func buildDatasetPage() *gtk.VBox {
 
 		fmt.Println("building datasets..")
 		disable_gui()
-		miner.Analysis(&apks, build_datasets_progress, output_folder, "build_datasets.py", build_datasets_cpu_count.GetValueAsInt())
+
+		// clear old features
+		d, err := os.Open(working_dir + "/tmp/")
+		if err != nil {
+			fmt.Println(err)
+		}
+		defer d.Close()
+
+		files, err := d.Readdir(-1)
+		if err != nil {
+			fmt.Println(err)
+		}
+
+		for _, file := range files {
+			if file.Mode().IsRegular() {
+				if filepath.Ext(file.Name()) == ".features" {
+					os.Remove(working_dir + "/tmp/" + file.Name())
+					fmt.Println("Deleted ", file.Name())
+				}
+			}
+		}
+
+		// build feature vectors
+		miner.Analysis(&apks, build_datasets_progress, output_folder, "build_feature_vector.py", build_datasets_cpu_count.GetValueAsInt())
+
+		// build Datasets
+		cmd := exec.Command(working_dir+"/scripts/build_datasets.py", "-o", output_folder)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			fmt.Println(err)
+		}
+
 		enable_gui()
 	})
 
