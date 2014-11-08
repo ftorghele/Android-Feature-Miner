@@ -330,9 +330,11 @@ func buildDatasetPage() *gtk.VBox {
 	build_datasets_frame := gtk.NewFrame("Build Datasets")
 	build_datasets_frame.SetBorderWidth(5)
 
-	build_datasets_hbox := gtk.NewHBox(false, 0)
-	build_datasets_hbox.SetBorderWidth(10)
-	build_datasets_hbox.SetSizeRequest(-1, 60)
+	build_datasets_vbox := gtk.NewVBox(false, 0)
+
+	build_datasets_hbox1 := gtk.NewHBox(false, 0)
+	build_datasets_hbox1.SetBorderWidth(10)
+	build_datasets_hbox1.SetSizeRequest(-1, 60)
 
 	build_datasets_progress := gtk.NewProgressBar()
 	build_datasets_start_button := gtk.NewButtonWithLabel("   Run   ")
@@ -342,11 +344,39 @@ func buildDatasetPage() *gtk.VBox {
 	build_datasets_cpu_count.Spin(gtk.SPIN_USER_DEFINED, float64(runtime.NumCPU()))
 	build_datasets_cpu_count.SetSizeRequest(40, -1)
 
-	build_datasets_hbox.PackStart(build_datasets_start_button, false, true, 5)
-	build_datasets_hbox.PackStart(build_datasets_progress, true, true, 5)
-	build_datasets_hbox.PackStart(build_datasets_cpu_count_label, false, true, 5)
-	build_datasets_hbox.PackStart(build_datasets_cpu_count, false, true, 5)
-	build_datasets_frame.Add(build_datasets_hbox)
+	build_datasets_hbox1.PackStart(build_datasets_start_button, false, true, 5)
+	build_datasets_hbox1.PackStart(build_datasets_progress, true, true, 5)
+	build_datasets_hbox1.PackStart(build_datasets_cpu_count_label, false, true, 5)
+	build_datasets_hbox1.PackStart(build_datasets_cpu_count, false, true, 5)
+
+	build_datasets_hbox2 := gtk.NewHBox(false, 0)
+	build_datasets_hbox2.SetBorderWidth(10)
+	build_datasets_hbox2.SetSizeRequest(-1, 60)
+
+	build_datasets_static_filter := gtk.NewSpinButtonWithRange(1, 99999, 1)
+	build_datasets_static_filter_label := gtk.NewLabel("static Filter: ")
+	build_datasets_static_filter.Spin(gtk.SPIN_USER_DEFINED, 49)
+	build_datasets_static_filter.SetSizeRequest(40, -1)
+	build_datasets_hbox2.PackStart(build_datasets_static_filter_label, true, true, 5)
+	build_datasets_hbox2.PackStart(build_datasets_static_filter, false, true, 5)
+
+	build_datasets_dynamic_filter := gtk.NewSpinButtonWithRange(1, 99999, 1)
+	build_datasets_dynamic_filter_label := gtk.NewLabel("dynamic Filter: ")
+	build_datasets_dynamic_filter.Spin(gtk.SPIN_USER_DEFINED, 49)
+	build_datasets_dynamic_filter.SetSizeRequest(40, -1)
+	build_datasets_hbox2.PackStart(build_datasets_dynamic_filter_label, true, true, 5)
+	build_datasets_hbox2.PackStart(build_datasets_dynamic_filter, false, true, 5)
+
+	build_datasets_traffic_filter := gtk.NewSpinButtonWithRange(1, 99999, 1)
+	build_datasets_traffic_filter_label := gtk.NewLabel("traffic Filter: ")
+	build_datasets_traffic_filter.Spin(gtk.SPIN_USER_DEFINED, 49)
+	build_datasets_traffic_filter.SetSizeRequest(40, -1)
+	build_datasets_hbox2.PackStart(build_datasets_traffic_filter_label, true, true, 5)
+	build_datasets_hbox2.PackStart(build_datasets_traffic_filter, false, true, 5)
+
+	build_datasets_vbox.Add(build_datasets_hbox2)
+	build_datasets_vbox.Add(build_datasets_hbox1)
+	build_datasets_frame.Add(build_datasets_vbox)
 	vbox.PackStart(build_datasets_frame, false, true, 0)
 
 	/* Helpers */
@@ -446,7 +476,7 @@ func buildDatasetPage() *gtk.VBox {
 		}
 
 		// build feature vectors
-		miner.Analysis(&apks, build_datasets_progress, output_folder, "build_feature_vector.py", build_datasets_cpu_count.GetValueAsInt())
+		miner.ExtractFeatures(&apks, build_datasets_progress, output_folder, build_datasets_cpu_count.GetValueAsInt(), build_datasets_static_filter.GetValueAsInt(), build_datasets_dynamic_filter.GetValueAsInt(), build_datasets_traffic_filter.GetValueAsInt())
 
 		// build Datasets
 		cmd := exec.Command(working_dir+"/scripts/build_datasets.py", "-o", output_folder)

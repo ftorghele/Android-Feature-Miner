@@ -23,68 +23,86 @@ func LoadAPKs(inputDir string, apks *[]string, button *gtk.Button) {
 	})
 }
 
+type Job struct {
+	command string
+	args    []string
+}
+
 func Analysis(apks *[]string, progressBar *gtk.ProgressBar, outputFolder string, script string, numCPU int) {
 	numOfJobs := len(*apks)
-	jobsChan := make(chan string, numOfJobs)
+	jobsChan := make(chan Job, numOfJobs)
 	doneChan := make(chan int)
 
 	go func() {
 		for _, path := range *apks {
-			jobsChan <- path
+			args := []string{
+				"-i" + path,
+				"-o" + outputFolder,
+			}
+			job := Job{command: working_dir + "/scripts/" + script, args: args}
+			jobsChan <- job
 		}
 	}()
 
 	for i := 0; i < numCPU; i++ {
-		go analysisConsumer(jobsChan, doneChan, outputFolder, script)
+		go consumer(jobsChan, doneChan)
 	}
 
-	jobsDone := 0
-	for {
-		select {
-		case <-doneChan:
-			jobsDone++
-			progressBar.SetFraction(float64(1) / float64(numOfJobs) * float64(jobsDone))
-			progressBar.SetText(strconv.Itoa(jobsDone) + "/" + strconv.Itoa(numOfJobs) + " done")
-		default:
-			gtk.MainIteration()
-		}
-		if jobsDone == numOfJobs {
-			progressBar.SetFraction(0.0)
-			progressBar.SetText("all done")
-			break
-		}
-	}
-}
-
-func analysisConsumer(jobsChan chan string, doneChan chan int, outputFolder string, script string) {
-	for {
-		input := <-jobsChan
-		cmd := exec.Command(working_dir+"/scripts/"+script, "-i", input, "-o", outputFolder)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			fmt.Println(err)
-		}
-		doneChan <- 1
-	}
+	updateGui(doneChan, progressBar, numOfJobs)
 }
 
 func VirusTotal(apks *[]string, progressBar *gtk.ProgressBar, apiKey string, delay int, numCPU int) {
 	numOfJobs := len(*apks)
-	jobsChan := make(chan string, numOfJobs)
+	jobsChan := make(chan Job, numOfJobs)
 	doneChan := make(chan int)
 
 	go func() {
 		for _, path := range *apks {
-			jobsChan <- path
+			args := []string{
+				"-i" + path,
+				"-k" + apiKey,
+				"-d" + strconv.Itoa(delay),
+			}
+			job := Job{command: working_dir + "/scripts/virus_total.py", args: args}
+			jobsChan <- job
 			time.Sleep(time.Duration(delay) * time.Millisecond)
 		}
 	}()
 
 	for i := 0; i < numCPU; i++ {
-		go virusTotalConsumer(jobsChan, doneChan, apiKey, delay)
+		go consumer(jobsChan, doneChan)
 	}
 
+	updateGui(doneChan, progressBar, numOfJobs)
+}
+
+func ExtractFeatures(apks *[]string, progressBar *gtk.ProgressBar, outputFolder string, numCPU int, staticFilter int, dynamicFilter int, trafficFilter int) {
+	numOfJobs := len(*apks)
+	jobsChan := make(chan Job, numOfJobs)
+	doneChan := make(chan int)
+
+	go func() {
+		for _, path := range *apks {
+			args := []string{
+				"-i" + path,
+				"-o" + outputFolder,
+				"-s" + strconv.Itoa(staticFilter),
+				"-d" + strconv.Itoa(dynamicFilter),
+				"-t" + strconv.Itoa(trafficFilter),
+			}
+			job := Job{command: working_dir + "/scripts/build_feature_vector.py", args: args}
+			jobsChan <- job
+		}
+	}()
+
+	for i := 0; i < numCPU; i++ {
+		go consumer(jobsChan, doneChan)
+	}
+
+	updateGui(doneChan, progressBar, numOfJobs)
+}
+
+func updateGui(doneChan chan int, progressBar *gtk.ProgressBar, numOfJobs int) {
 	jobsDone := 0
 	for {
 		select {
@@ -103,10 +121,10 @@ func VirusTotal(apks *[]string, progressBar *gtk.ProgressBar, apiKey string, del
 	}
 }
 
-func virusTotalConsumer(jobsChan chan string, doneChan chan int, apiKey string, delay int) {
+func consumer(jobsChan chan Job, doneChan chan int) {
 	for {
-		input := <-jobsChan
-		cmd := exec.Command(working_dir+"/scripts/virus_total.py", "-i"+input, "-k"+apiKey, "-d"+strconv.Itoa(delay))
+		job := <-jobsChan
+		cmd := exec.Command(job.command, job.args...)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
