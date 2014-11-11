@@ -63,9 +63,33 @@ def hashfile(filepath) :
 
     return filehash
 
+def build_vector(analysis_type, analysis_filter) :
+    filepath = current_dir + '/../tmp/' + hashfile(options.input) + '.' + analysis_type + '_features'
+
+    query = { "$and": [ { "_id": { '$regex': '^' + re.escape(analysis_type) } }, { "$or": [ { "inMalwareCount": { "$gte": int(analysis_filter) } }, { "inBenignCount": { "$gte": int(analysis_filter) } } ] } ] }
+    count = 0
+
+    f = open(filepath, 'wb+')
+    for feature in db.features.find(query).sort("_id", 1) :
+        sample = db["features_" + hashfile(options.input)].find_one({"_id": feature.get('_id')})
+        count += 1
+        if sample != None :
+            maxValue = feature.get('maxValue', None)
+            if maxValue != None :
+                value = (1 / maxValue) * sample.get('maxValue')
+                f.write("%s, " % str(value))
+            else :
+                f.write("1, ")
+        else :
+            f.write("0, ")
+    if count != 0 :
+        f.seek(-2, os.SEEK_END)
+        f.truncate() 
+    f.close()
+
 def main(options, args) :
     if options.input == None or options.output == None :
-        print "build_feature_vector.py -i <inputfile> -o <outputfolder>"
+        print "build_feature_vector.py -i <inputfile> -o <outputfolder> -s <staticFilter> -d <dynamicFilter> -t <trafficFilter>"
         sys.exit(2)
     elif db.dynamic_features.find({"_id": hashfile(options.input), "valid": True}).count() == 0 :
         print "no valid dynamic analysis found.. skipping.."
@@ -87,33 +111,19 @@ def main(options, args) :
         cmd = [ current_dir + "/build_feature_vector_prepare.py", "-i", options.input, "-o", options.output, "-c", "features_" + hashfile(options.input) ]
         subprocess.call(cmd)
 
-        filepath = current_dir + '/../tmp/' + hashfile(options.input) + '.features'
-        if os.path.isfile(filepath) :
-            print "not necessary to analyze sample twice.."
-            exit(0)
-
-        f = open(filepath, 'wb+')
-        for feature in db.features.find({ "$or": [ { "inMalwareCount": { "$gte": 50 } }, { "inBenignCount": { "$gte": 50 } } ] }).sort("_id", 1) :
-            sample = db["features_" + hashfile(options.input)].find_one({"_id": feature.get('_id')})
-            if sample != None :
-                maxValue = feature.get('maxValue', None)
-                if maxValue != None :
-                    value = (1 / maxValue) * sample.get('maxValue')
-                    f.write("%s, " % str(value))
-                else :
-                    f.write("1, ")
-            else :
-                f.write("0, ")
-        f.seek(-2, os.SEEK_END)
-        f.truncate()
-        f.write("\n")   
-        f.close()
+        build_vector("static", options.staticFilter)
+        build_vector("dynamic", options.dynamicFilter)
+        build_vector("traffic", options.trafficFilter)
+        
         db.drop_collection('features_' + hashfile(options.input))
 
 if __name__ == "__main__" :
     parser = OptionParser()
     parser.add_option("-i", "--input", dest="input", help="path to the APK file which shoud be analysed.")
     parser.add_option("-o", "--output", dest="output", help="folder to store pulled files.")
+    parser.add_option("-s", "--staticFilter", dest="staticFilter", default=50, help="minimum count of samples with a certain static feature.")
+    parser.add_option("-d", "--dynamicFilter", dest="dynamicFilter", default=50, help="minimum count of samples with a certain dynamic feature.")
+    parser.add_option("-t", "--trafficFilter", dest="trafficFilter", default=50, help="minimum count of samples with a certain traffic feature.")
     (options, args) = parser.parse_args()
 
     sys.argv[:] = args

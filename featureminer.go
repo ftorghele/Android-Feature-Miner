@@ -374,6 +374,9 @@ func buildDatasetPage() *gtk.VBox {
 	build_datasets_hbox2.PackStart(build_datasets_traffic_filter_label, true, true, 5)
 	build_datasets_hbox2.PackStart(build_datasets_traffic_filter, false, true, 5)
 
+	build_datasets_check_filter_button := gtk.NewButtonWithLabel("Check Filters")
+	build_datasets_hbox2.PackStart(build_datasets_check_filter_button, false, true, 5)
+
 	build_datasets_vbox.Add(build_datasets_hbox2)
 	build_datasets_vbox.Add(build_datasets_hbox1)
 	build_datasets_frame.Add(build_datasets_vbox)
@@ -428,6 +431,24 @@ func buildDatasetPage() *gtk.VBox {
 		enable_gui()
 	})
 
+	build_datasets_check_filter_button.Connect("clicked", func() {
+		disable_gui()
+		static_out, err := exec.Command(working_dir+"/scripts/check_filter.py", "-t", "static", "-f", strconv.Itoa(build_datasets_static_filter.GetValueAsInt())).Output()
+		if err != nil {
+			fmt.Println(err)
+		}
+		dynamic_out, err := exec.Command(working_dir+"/scripts/check_filter.py", "-t", "dynamic", "-f", strconv.Itoa(build_datasets_dynamic_filter.GetValueAsInt())).Output()
+		if err != nil {
+			fmt.Println(err)
+		}
+		traffic_out, err := exec.Command(working_dir+"/scripts/check_filter.py", "-t", "traffic", "-f", strconv.Itoa(build_datasets_traffic_filter.GetValueAsInt())).Output()
+		if err != nil {
+			fmt.Println(err)
+		}
+		enable_gui()
+		displayDialog(string(static_out) + string(dynamic_out) + string(traffic_out))
+	})
+
 	build_datasets_start_button.Connect("clicked", func() {
 		session, err := mgo.Dial("localhost:6662")
 		if err != nil {
@@ -479,7 +500,7 @@ func buildDatasetPage() *gtk.VBox {
 		miner.ExtractFeatures(&apks, build_datasets_progress, output_folder, build_datasets_cpu_count.GetValueAsInt(), build_datasets_static_filter.GetValueAsInt(), build_datasets_dynamic_filter.GetValueAsInt(), build_datasets_traffic_filter.GetValueAsInt())
 
 		// build Datasets
-		cmd := exec.Command(working_dir+"/scripts/build_datasets.py", "-o", output_folder)
+		cmd := exec.Command(working_dir+"/scripts/build_datasets.py", "-o", output_folder, "-s", strconv.Itoa(build_datasets_static_filter.GetValueAsInt()), "-d", strconv.Itoa(build_datasets_dynamic_filter.GetValueAsInt()), "-t", strconv.Itoa(build_datasets_traffic_filter.GetValueAsInt()))
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
